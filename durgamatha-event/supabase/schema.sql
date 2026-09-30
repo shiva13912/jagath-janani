@@ -125,3 +125,16 @@ create index events_event_date_idx on public.events (event_date);
 create trigger events_set_updated_at
   before update on public.events
   for each row execute function public.set_updated_at();
+
+-- ---------------------------------------------------------------------
+-- Step 3: security for events
+-- ---------------------------------------------------------------------
+
+-- Our app reads and writes events ONLY through the Express backend, which uses the
+-- service-role key. That key bypasses RLS, and the backend itself checks who is
+-- allowed to do what (requireAuth + requireRole).
+--
+-- We still turn RLS on, with NO policies. That means anyone calling Supabase
+-- directly with the public anon key (for example from the browser console)
+-- cannot read, create, change or delete events. The only way in is our API.
+alter table public.events enable row level security;

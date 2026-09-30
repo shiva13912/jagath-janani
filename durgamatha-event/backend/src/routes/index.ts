@@ -1,5 +1,6 @@
 import { Router } from 'express'
 import authRoutes from './authRoutes'
+import eventRoutes from './eventRoutes'
 import healthRoutes from './healthRoutes'
 import testRoutes from './testRoutes'
 
@@ -9,6 +10,7 @@ const router = Router()
 
 router.use('/health', healthRoutes)
 router.use('/auth', authRoutes)
+router.use('/events', eventRoutes)
 router.use('/test', testRoutes) // temporary, for testing roles
 
 export default router
