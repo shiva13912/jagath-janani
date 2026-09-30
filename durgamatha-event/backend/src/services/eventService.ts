@@ -60,7 +60,7 @@ export async function updateEvent(id: string, input: EventInput): Promise<Event 
 }
 
 // Returns false if there was no event with this id.
-// Nothing else depends on events yet (albums come in a later phase), so a plain delete is enough.
+// The database deletes the event's albums too (albums.event_id is ON DELETE CASCADE).
 export async function deleteEvent(id: string): Promise<boolean> {
   const { data, error } = await supabaseAdmin.from('events').delete().eq('id', id).select('id')
 
