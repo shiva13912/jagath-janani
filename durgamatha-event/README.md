@@ -2,7 +2,7 @@
 
 A web application for managing and sharing the events of Durgamatha. Visitors will be able to browse events and view event photos and videos, and organizers will be able to manage them.
 
-The project is being built in phases. Phase 1 (project foundation), Phase 2 (authentication and roles), Phase 3 (event management), Phase 4 (album management) and Phase 5 (photo and video management with Cloudinary) are done.
+The project is being built in phases. Phase 1 (project foundation), Phase 2 (authentication and roles), Phase 3 (event management), Phase 4 (album management), Phase 5 (photo and video management with Cloudinary) and Phase 6 (gallery and media viewer) are done.
 
 ## Tech stack
 
@@ -21,16 +21,16 @@ durgamatha-event/
 ├── frontend/                 React app (runs on http://localhost:5173)
 │   ├── public/               Static files (favicon)
 │   ├── src/
-│   │   ├── components/       Reusable UI pieces (Navbar, FormField, ProtectedRoute, EventForm, AlbumForm, EventAlbums, MediaUploader, MediaGrid)
+│   │   ├── components/       Reusable UI pieces (Navbar, FormField, ProtectedRoute, EventForm, AlbumForm, EventAlbums, AlbumCard, MediaUploader, MediaGrid, MediaCard, MediaViewer, Pagination, ...)
 │   │   ├── config/           Supabase client (public key only)
 │   │   ├── context/          AuthContext + AuthProvider (logged-in user state)
-│   │   ├── pages/            One file per page (Home, Events, Event details, Login, Register, Profile, Admin, Album details, admin event pages, album management pages, ...)
+│   │   ├── pages/            One file per page (Home, Events, Event details, Login, Register, Profile, Admin, Gallery, Album details, admin event pages, album management pages, ...)
 │   │   ├── layouts/          Shared page layout (navbar + footer)
 │   │   ├── routes/           All URL routes in one place
 │   │   ├── services/         API calls (Axios instance, auth, event, album, media and health services)
-│   │   ├── hooks/            Custom React hooks (useAuth)
+│   │   ├── hooks/            Custom React hooks (useAuth, usePagedMedia)
 │   │   ├── types/            TypeScript types
-│   │   ├── utils/            Helpers (form validation, role lists, dates, API error messages, media file checks)
+│   │   ├── utils/            Helpers (form validation, role lists, dates, API error messages, media files and Cloudinary URLs, gallery filters)
 │   │   ├── assets/           Images and other assets (empty for now)
 │   │   ├── App.tsx
 │   │   └── main.tsx          Entry point
@@ -46,7 +46,7 @@ durgamatha-event/
 │   │   ├── routes/           API routes (all under /api)
 │   │   ├── services/         Database and Cloudinary access (profiles, events, albums, media)
 │   │   ├── types/            TypeScript types (roles, req.user, events, albums, media)
-│   │   ├── utils/            Helpers (event, album and media file validation)
+│   │   ├── utils/            Helpers (event, album, media file and gallery filter validation)
 │   │   ├── app.ts            Creates and configures the Express app
 │   │   └── server.ts         Starts the server
 │   ├── .env.example
@@ -77,8 +77,9 @@ Do this once, before running the app.
    - the `events` table (Phase 3), with Row Level Security turned on
    - the `albums` table (Phase 4), linked to events, with Row Level Security turned on
    - the `media` table (Phase 5), linked to albums, with Row Level Security turned on
+   - the album cover link (Phase 6): `albums.cover_media_id` → `media`, reset automatically when the cover is deleted
 
-   If you already ran earlier parts, run only the sections you haven't run yet (for example only the **Phase 5** section at the bottom of the file).
+   If you already ran earlier parts, run only the sections you haven't run yet (for example only the **Phase 6** section at the bottom of the file).
 6. **Keys:** in **Project Settings → API Keys** you'll find a *publishable* key (`sb_publishable_...`) and a *secret* key (`sb_secret_...`), or, on older projects, the legacy *anon* and *service_role* keys. The **Project URL** is under **Project Settings → Data API** (or the **Connect** button). Put them in the `.env` files as described below.
 
 ## Local development
@@ -225,13 +226,15 @@ On the backend:
 | POST | `/api/events` | `ADMIN` | Create an event |
 | PUT | `/api/events/:id` | `ADMIN` | Update an event |
 | DELETE | `/api/events/:id` | `ADMIN` | Delete an event (and its albums, photos and videos) |
-| GET | `/api/albums` | Anyone | List all albums (see [Album Management](#album-management)) |
+| GET | `/api/albums` | Anyone | List all albums, optional `?search=` and `?eventId=` (see [Album Management](#album-management)) |
 | GET | `/api/albums/:id` | Anyone | One album, with its event |
 | GET | `/api/events/:eventId/albums` | Anyone | Albums of one event |
 | POST | `/api/events/:eventId/albums` | `TEAM_MEMBER`, `ADMIN` | Create an album in an event |
 | PUT | `/api/albums/:id` | `TEAM_MEMBER`, `ADMIN` | Update an album |
 | DELETE | `/api/albums/:id` | `ADMIN` | Delete an album (and its photos and videos) |
-| GET | `/api/albums/:albumId/media` | Anyone | Photos and videos of one album (see [Media Management](#media-management)) |
+| GET | `/api/albums/:albumId/media` | Anyone | One page of an album's photos and videos, `?page=&limit=&type=` (see [Gallery](#gallery)) |
+| GET | `/api/media` | Anyone | The public gallery: one page from all albums, `?eventId=&albumId=&type=&page=&limit=` |
+| PUT | `/api/albums/:id/cover` | `TEAM_MEMBER`, `ADMIN` | Set or remove the album cover |
 | POST | `/api/albums/:albumId/media` | `TEAM_MEMBER`, `ADMIN` | Upload photos/videos to an album |
 | GET | `/api/media/:id` | Anyone | One photo or video |
 | DELETE | `/api/media/:id` | `ADMIN` | Delete a photo or video |
@@ -320,7 +323,7 @@ An album groups the photos and videos of one event. For example, the event *Durg
 | `event_id` | uuid | Required, references `events.id`. Taken from the URL when the album is created; cannot be changed afterwards |
 | `name` | text | Required |
 | `description` | text | Optional (`NULL` when empty) |
-| `cover_media_id` | uuid | Optional. Reserved for choosing an album cover in a later phase; always `NULL` for now |
+| `cover_media_id` | uuid | Optional. The album's cover photo/video (references `media.id`, `ON DELETE SET NULL`). See [Album covers](#album-covers) |
 | `created_by` | uuid | Required, references `profiles.id`. Set by the backend from the logged-in user |
 | `created_at` | timestamptz | Set automatically |
 | `updated_at` | timestamptz | Updated automatically by a trigger |
@@ -365,8 +368,8 @@ events (1) ────────< albums (many)
 
 ### How albums appear under events (everyone)
 
-- `/events/:eventId` has an **Albums** section with a card per album (a placeholder instead of a cover image) and a **View Album** link. With no albums it says "No albums available for this event yet."
-- `/albums/:albumId` shows the album name and description, its event, the event date and location, and its photos and videos (or "No photos or videos have been added yet."). Unknown ids show "Album not found".
+- `/events/:eventId` has an **Albums** section with a card per album (its cover image, or a placeholder when no cover is chosen) and a **View Album** link. With no albums it says "No albums available for this event yet."
+- `/albums/:albumId` shows the album name and description, its event, the event date and location, and its photos and videos page by page (see [Album gallery](#album-gallery-albumsalbumid)). Unknown ids show "Album not found".
 
 ### Managing albums
 
@@ -457,13 +460,13 @@ Row Level Security is **on with no policies**, like `events` and `albums`: only 
 2. **Upload** sends the files **one at a time** with Axios, so each file shows its real progress bar. When a file reaches 100% it shows "processing..." while the backend sends it on to Cloudinary.
 3. The backend (Multer) saves the file in the server's temporary folder, uploads it to Cloudinary, saves a `media` row, and **always deletes the temporary file**. Nothing is kept on the Express server.
 4. If saving the row fails after the Cloudinary upload, the backend deletes the new Cloudinary file again so no unused file is left. (If even that fails, the server logs "ORPHANED CLOUDINARY FILE" with the public id so it can be removed by hand.)
-5. When all files are done, the grid reloads. Files that failed keep their error message.
+5. When all files are done, the album page shows page 1 of All, where the new files are (newest first). Files that failed keep their error message.
 
 ### API endpoints and permissions
 
 | Method | URL | Logged out / `PUBLIC` | `TEAM_MEMBER` | `ADMIN` |
 | --- | --- | --- | --- | --- |
-| GET | `/api/albums/:albumId/media` | ✅ | ✅ | ✅ |
+| GET | `/api/albums/:albumId/media` (paginated, see [Gallery](#pagination)) | ✅ | ✅ | ✅ |
 | GET | `/api/media/:id` | ✅ | ✅ | ✅ |
 | POST | `/api/albums/:albumId/media` | ❌ 401 / 403 | ✅ 201 | ✅ 201 |
 | DELETE | `/api/media/:id` | ❌ 401 / 403 | ❌ 403 | ✅ 200 |
@@ -474,7 +477,7 @@ Row Level Security is **on with no policies**, like `events` and `albums`: only 
 
 ### Deleting media
 
-- **One photo or video (admins only):** click **Delete** under it and confirm. The backend deletes the file from **Cloudinary first**, then the `media` row. If Cloudinary fails, the row is kept and the page shows "Could not delete the files from Cloudinary. Nothing was deleted, please try again.", so the database never points to a missing file without you knowing.
+- **One photo or video (admins only):** open it in the viewer, click **Delete** and confirm. The backend deletes the file from **Cloudinary first**, then the `media` row. If Cloudinary fails, the row is kept and the page shows "Could not delete the files from Cloudinary. Nothing was deleted, please try again.", so the database never points to a missing file without you knowing.
 - **An album or event:** before deleting it, the backend deletes all its files from Cloudinary. If that fails, nothing is deleted (`502`). Then the database delete removes the album(s) and, through `ON DELETE CASCADE`, their `media` rows.
 
 ### How to test uploads and deletion
@@ -483,7 +486,7 @@ Row Level Security is **on with no policies**, like `events` and `albums`: only 
 2. **Team member:** open an album, upload a JPG, a PNG and a short MP4 together. Watch the progress bars, then check the grid, the Cloudinary **Media Library** (folder `durgamatha/events/...`) and the `media` table in Supabase.
 3. Try a GIF, a PDF and a photo over 10 MB: each is marked as not allowed and is not uploaded. There is no Delete button.
 4. **Admin:** delete a photo (cancel once first). It disappears from the page, the Cloudinary Media Library and the `media` table. Delete an album with photos and check its files are gone from Cloudinary.
-5. **Logged out / `PUBLIC`:** the photos and videos are visible, but there is no upload panel and no Delete button.
+5. **Logged out / `PUBLIC`:** the photos and videos are visible, but there is no upload panel and no Delete button in the viewer.
 6. **API directly:**
 
    ```bash
@@ -492,6 +495,153 @@ Row Level Security is **on with no policies**, like `events` and `albums`: only 
                                                                      # 401 no token, 403 PUBLIC, 201 TEAM_MEMBER/ADMIN
    curl -i -X DELETE http://localhost:5000/api/media/<media-id> -H "Authorization: Bearer <token>"
                                                                      # 403 TEAM_MEMBER, 200 ADMIN
+   ```
+
+## Gallery
+
+Anyone can browse photos and videos, with no login needed. Team members and admins also manage media and album covers from the same pages. As in Phase 5, the files stay in Cloudinary and PostgreSQL stores only their metadata and Cloudinary references.
+
+### Gallery page (`/gallery`)
+
+The **Gallery** link in the menu opens a page with two tabs:
+
+- **Photos & Videos:** every photo and video, newest first, 24 per page.
+  - Filters: **Event**, **Album** (only the chosen event's albums) and **All / Photos / Videos**.
+  - **Clear filters** resets them.
+  - Each card is captioned with its album name.
+- **Albums** (`/gallery?tab=albums`): album cards with their cover, event and a **View Album** link.
+  - The **Search albums...** box finds albums by name. It is case-insensitive, and it searches 300 ms after you stop typing.
+  - An **Event** filter narrows the list.
+
+Filters and the page number are kept in the URL (for example `/gallery?event=<id>&type=video&page=2`), so the browser's Back button and shared links keep them.
+
+### Album gallery (`/albums/:albumId`)
+
+The album page shows the album name and description, the event, its date and location, and then the album's photos and videos.
+- They are newest first, 24 per page, with an **All / Photos / Videos** filter and **Previous / Next** pages.
+- Team members and admins also see the Phase 5 upload panel. After an upload, the page jumps to page 1, where the new files are.
+
+The grid has 2 columns on phones, 3 on tablets, 4 on laptops and 5 on large screens. Videos show a still frame with a ▶ badge and their length, and **never autoplay** in the grid.
+
+### Media viewer
+
+Clicking a card opens a fullscreen viewer:
+- **Photos** are shown fitted to the screen.
+- **Videos** get a normal player that only starts when you press play.
+
+| Control | What it does |
+| --- | --- |
+| **✕ / Close**, or **Esc** | Closes the viewer and returns focus to the card |
+| **‹ ›** buttons, or **← →** keys | Previous / next item. At the end of a page, the next page is loaded automatically |
+| **Download** | Downloads the original file (see below) |
+| **Set as album cover** | Team members and admins (album page) |
+| **Delete** | Admins only (album page), after "Are you sure you want to delete this media?" |
+
+Below the picture, the viewer shows:
+- the file name and position ("5 of 30");
+- the type, dimensions, size, video length and upload date;
+- in the gallery, a link to the item's album.
+
+Internal ids and keys are never shown.
+
+### Pagination
+
+`GET /api/albums/:albumId/media` and `GET /api/media` return one page at a time:
+
+```json
+{
+  "success": true,
+  "media": [ ... ],
+  "pagination": { "page": 1, "limit": 24, "total": 100, "totalPages": 5 }
+}
+```
+
+- `page` starts at 1 and `limit` defaults to 24, with a **maximum of 60**, so nobody can ask for thousands of items at once.
+- `page=0`, `page=abc`, `limit=61` or `limit=0` return **400** "Invalid filter" with an `errors` list.
+- A page after the last one returns an empty list with the real `total`. The frontend then jumps to the last page.
+- The backend uses Supabase's `range()` to ask PostgreSQL for only those rows, and `count: 'exact'` to get the total in the same request.
+
+### Filtering and search
+
+| Endpoint | Query parameters |
+| --- | --- |
+| `GET /api/albums/:albumId/media` | `page`, `limit`, `type` (`image` or `video`) |
+| `GET /api/media` | `page`, `limit`, `type`, `eventId`, `albumId` |
+| `GET /api/albums` | `search` (part of the name), `eventId` |
+
+- **Invalid values return 400:** `type=abc`, or a badly formed `eventId` or `albumId`.
+- **Valid ids that match nothing** simply return an empty list.
+- **How `eventId` works:** the backend finds that event's album ids, then selects media in those albums.
+- **How `search` works:** it is a simple PostgreSQL `ilike '%text%'`. The characters `%`, `_` and `*` are removed first, so they are searched as plain text rather than acting as wildcards. There is no search engine.
+
+### Lazy loading and Cloudinary transformations
+
+- **Lazy loading.** Grid images use the browser's `loading="lazy"`. On a phone, only the cards near the screen are downloaded, and the rest load as you scroll.
+- **Transformations.** The grid never downloads original files. The frontend builds Cloudinary URLs with **transformations** (`frontend/src/utils/mediaFiles.ts`), put right after `/upload/` in the stored `secure_url`:
+
+| Use | Transformation | Meaning |
+| --- | --- | --- |
+| Photo card | `c_fill,w_400,h_400,q_auto,f_auto` | Crop to a 400×400 square, automatic quality and format (e.g. WebP) |
+| Video card | `so_0,c_fill,w_400,h_400,q_auto` + `.jpg` | A still picture of the frame at 0 seconds |
+| Photo in viewer | `c_limit,w_1600,h_1600,q_auto,f_auto` | At most 1600 px, never enlarged |
+| Video poster in viewer | `so_0,c_limit,w_1600,q_auto` + `.jpg` | Still frame shown before playing |
+| Download | `fl_attachment:<name>` | The original file, sent as a download |
+
+Cloudinary creates each version the first time it is asked for and then caches it. The `secure_url` stored in PostgreSQL is **never changed**; these URLs are only built for display.
+
+### Downloads
+
+**Download** is a normal link to `…/upload/fl_attachment:<file-name>/…` on Cloudinary. Cloudinary sends the original file with a "save as" header, so:
+
+- the file goes **straight from Cloudinary to the browser, never through the Express server**;
+- the link contains no API key, secret or signature, because it is the same public delivery URL used to show the file;
+- anyone who can view the gallery can download, including logged-out visitors.
+
+### Album covers
+
+- **Choosing a cover:** in the viewer on an album page, **Set as album cover** calls `PUT /api/albums/:id/cover` with `{ "media_id": "<id>" }`. **Remove as album cover** sends `{ "media_id": null }`.
+  - The photo or video must belong to that album; otherwise the answer is 400.
+  - Videos can be covers too; their still frame is shown.
+- **Showing covers:** album lists (`GET /api/albums`, `GET /api/albums/:id`, `GET /api/events/:eventId/albums`) include `cover: { id, secure_url, resource_type }` in the **same query**, so a page of album cards needs one request, not one per album.
+  - Cards without a cover show a simple placeholder.
+- **Deleting the cover photo:** the database resets the cover by itself. `albums.cover_media_id` references `media(id)` with **`ON DELETE SET NULL`** (the "PHASE 6" section of `schema.sql`), so an album can never point to a deleted photo.
+
+### Permissions
+
+| | Logged out / `PUBLIC` | `TEAM_MEMBER` | `ADMIN` |
+| --- | --- | --- | --- |
+| View gallery, albums, viewer | ✅ | ✅ | ✅ |
+| Download | ✅ | ✅ | ✅ |
+| Upload (Phase 5) | ❌ 401 / 403 | ✅ | ✅ |
+| Set or remove album cover | ❌ 401 / 403 | ✅ | ✅ |
+| Delete media | ❌ 401 / 403 | ❌ 403 | ✅ |
+
+Setting a cover counts as editing the album, so it follows the album-edit permission. The backend checks every rule (`requireAuth` + `requireRole`); the frontend only hides the buttons.
+
+### How to test the gallery
+
+1. Run the **Phase 6** section of `supabase/schema.sql` in the Supabase SQL Editor.
+2. **Logged out:**
+   - Open **Gallery**, then try the Event, Album and Photos/Videos filters and the page buttons.
+   - Open a photo, use ← → and Esc, and click **Download**.
+   - Open a video: it only plays when you press play.
+3. **Albums tab:** search for part of an album name.
+4. **Team member:**
+   - On an album page, open a photo and click **Set as album cover**.
+   - The album's card on the event page and in the Albums tab now shows it. There is no Delete button.
+5. **Admin:**
+   - Delete the cover photo (cancel once first).
+   - The card goes back to the placeholder, and `albums.cover_media_id` is `NULL` in Supabase.
+6. **Phone:** in DevTools device mode, check that the gallery has 2 columns and that the viewer fits the screen with easy-to-tap buttons.
+7. **API:**
+
+   ```bash
+   curl "http://localhost:5000/api/albums/<album-id>/media?page=1&limit=24&type=image"   # 200 with pagination
+   curl "http://localhost:5000/api/albums/<album-id>/media?type=abc"                     # 400
+   curl "http://localhost:5000/api/media?eventId=<event-id>&type=video"                  # gallery filter
+   curl "http://localhost:5000/api/albums?search=proc"                                   # album search
+   curl -X PUT http://localhost:5000/api/albums/<album-id>/cover -H "Authorization: Bearer <token>" \
+     -H "Content-Type: application/json" -d '{"media_id":"<media-id>"}'                  # 403 PUBLIC, 200 TEAM_MEMBER/ADMIN
    ```
 
 ## Current development phase
@@ -528,4 +678,11 @@ Row Level Security is **on with no policies**, like `events` and `albums`: only 
 - Upload API for team members and admins (type and size checks, up to 10 files per request); admin-only delete
 - Upload panel with drag and drop and real progress on the album page, and a lazy-loaded photo/video grid
 
-Features such as the gallery, dashboards and deployment will be added in later phases.
+**Phase 6: Gallery and media experience** (done)
+
+- Public `/gallery` with event, album and type filters, pagination and album search
+- Album gallery with a paged grid, a fullscreen photo/video viewer (keyboard and mobile friendly) and direct Cloudinary downloads
+- Optimised Cloudinary thumbnails, lazy loading, no autoplay
+- Album covers, reset automatically when the cover photo is deleted
+
+Features such as dashboards and deployment will be added in later phases.
