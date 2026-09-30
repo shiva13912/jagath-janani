@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router'
+import EventAlbums from '../components/EventAlbums'
 import { getEventById } from '../services/eventService'
 import type { Event } from '../types/event'
 import { getErrorMessage, isNotFoundError } from '../utils/apiError'
@@ -57,6 +58,9 @@ function EventDetailsPage() {
           <p className="mt-6 whitespace-pre-line text-gray-800">{event.description}</p>
         </article>
       )}
+
+      {/* Albums are loaded separately, once we know the event exists */}
+      {event && <EventAlbums eventId={event.id} />}
     </section>
   )
 }

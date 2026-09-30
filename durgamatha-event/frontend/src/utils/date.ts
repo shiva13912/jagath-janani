@@ -18,3 +18,8 @@ export function todayString(): string {
   const day = String(now.getDate()).padStart(2, '0')
   return `${now.getFullYear()}-${month}-${day}`
 }
+
+// A full timestamp like "2026-09-30T15:29:31.762Z" -> "30 September 2026" (in the user's time zone)
+export function formatTimestampDate(value: string): string {
+  return new Date(value).toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' })
+}
