@@ -185,3 +185,58 @@ create trigger albums_set_updated_at
 -- Same as events: RLS on with NO policies, so nobody can use the public anon key
 -- to read or change albums directly. Only our Express backend (service-role key) can.
 alter table public.albums enable row level security;
+
+-- =====================================================================
+-- PHASE 5: MEDIA (photos and videos)
+-- Run this section once in the Supabase SQL Editor.
+-- (If you already ran Phases 2-4, run ONLY this part.)
+--
+-- The actual image/video files are stored in Cloudinary.
+-- This table stores only metadata and the Cloudinary references (public id + URL),
+-- never the files themselves.
+-- =====================================================================
+
+-- ---------------------------------------------------------------------
+-- Media table
+-- ---------------------------------------------------------------------
+
+-- events 1 ──── * albums 1 ──── * media ──── Cloudinary file
+create table public.media (
+  id                    uuid primary key default gen_random_uuid(),
+  -- The album this photo/video belongs to. Every media item belongs to exactly one album.
+  -- "on delete cascade": deleting an album deletes its media ROWS. The backend deletes
+  -- the Cloudinary FILES first, because the database cannot reach Cloudinary.
+  album_id              uuid not null references public.albums (id) on delete cascade,
+  -- Who uploaded it. The backend fills this in from the logged-in user.
+  uploaded_by           uuid not null references public.profiles (id),
+  -- Cloudinary's id for the file, e.g. "durgamatha/events/<id>/albums/<id>/abc123".
+  -- Needed to delete the file later. Unique: one row per Cloudinary file.
+  cloudinary_public_id  text not null unique,
+  -- The https URL used to show the photo/video
+  secure_url            text not null,
+  resource_type         text not null check (resource_type in ('image', 'video')),
+  format                text not null,             -- e.g. jpg, png, webp, mp4, webm, mov
+  original_filename     text not null,             -- the name of the file on the uploader's computer
+  file_size             bigint not null,           -- in bytes
+  width                 integer,                   -- pixels (images and most videos)
+  height                integer,
+  duration              numeric,                   -- seconds, videos only
+  created_at            timestamptz not null default now(),
+  updated_at            timestamptz not null default now()
+);
+
+-- Speeds up "all media of this album", the query used by the album page
+create index media_album_id_idx on public.media (album_id);
+
+-- Reuse the updated_at function from Phase 2
+create trigger media_set_updated_at
+  before update on public.media
+  for each row execute function public.set_updated_at();
+
+-- ---------------------------------------------------------------------
+-- Security for media
+-- ---------------------------------------------------------------------
+
+-- Same as events and albums: RLS on with NO policies, so only our Express backend
+-- (service-role key) can read or change media rows.
+alter table public.media enable row level security;

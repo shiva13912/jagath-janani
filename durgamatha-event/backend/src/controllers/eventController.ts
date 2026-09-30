@@ -1,6 +1,10 @@
 import type { Request, Response } from 'express'
+import { CloudinaryError } from '../config/cloudinary'
+import * as albumService from '../services/albumService'
 import * as eventService from '../services/eventService'
+import * as mediaService from '../services/mediaService'
 import { isValidUuid, validateEventInput } from '../utils/eventValidation'
+import { sendCloudinaryDeleteFailed } from './mediaController'
 
 // Express 5 automatically sends errors thrown in async handlers to our error handler,
 // so these functions don't need try/catch.
@@ -58,6 +62,17 @@ export async function updateEvent(req: Request<{ id: string }>, res: Response) {
 // DELETE /api/events/:id — ADMIN only
 export async function deleteEvent(req: Request<{ id: string }>, res: Response) {
   if (!isValidUuid(req.params.id)) return sendNotFound(res)
+
+  // First delete the photos/videos of ALL the event's albums from Cloudinary.
+  // The database then deletes the albums and media rows with the event (ON DELETE CASCADE).
+  // If Cloudinary fails, stop here so nothing is left half-deleted.
+  try {
+    const albums = await albumService.getAlbumsByEvent(req.params.id)
+    await mediaService.deleteFilesOfAlbums(albums.map((album) => album.id))
+  } catch (err) {
+    if (err instanceof CloudinaryError) return sendCloudinaryDeleteFailed(res, err)
+    throw err
+  }
 
   const deleted = await eventService.deleteEvent(req.params.id)
   if (!deleted) return sendNotFound(res)

@@ -19,4 +19,8 @@ export const env = {
   frontendUrl: process.env.FRONTEND_URL || 'http://localhost:5173',
   supabaseUrl: requireEnv('SUPABASE_URL'),
   supabaseServiceRoleKey: requireEnv('SUPABASE_SERVICE_ROLE_KEY'),
+  // Cloudinary (photo/video storage). The API secret must only ever live in backend/.env.
+  cloudinaryCloudName: requireEnv('CLOUDINARY_CLOUD_NAME'),
+  cloudinaryApiKey: requireEnv('CLOUDINARY_API_KEY'),
+  cloudinaryApiSecret: requireEnv('CLOUDINARY_API_SECRET'),
 }

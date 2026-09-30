@@ -75,7 +75,8 @@ export async function updateAlbum(id: string, input: AlbumInput): Promise<Album 
 }
 
 // Returns false if there was no album with this id.
-// No media exists yet, so deleting the album row is all that is needed (Phase 5 will change this).
+// The database deletes the album's media rows too (ON DELETE CASCADE).
+// The controller deletes the Cloudinary files first.
 export async function deleteAlbum(id: string): Promise<boolean> {
   const { data, error } = await supabaseAdmin.from('albums').delete().eq('id', id).select('id')
 

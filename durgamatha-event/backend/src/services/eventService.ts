@@ -60,7 +60,8 @@ export async function updateEvent(id: string, input: EventInput): Promise<Event 
 }
 
 // Returns false if there was no event with this id.
-// The database deletes the event's albums too (albums.event_id is ON DELETE CASCADE).
+// The database deletes the event's albums and their media rows too (ON DELETE CASCADE).
+// The controller deletes the Cloudinary files first.
 export async function deleteEvent(id: string): Promise<boolean> {
   const { data, error } = await supabaseAdmin.from('events').delete().eq('id', id).select('id')
 
