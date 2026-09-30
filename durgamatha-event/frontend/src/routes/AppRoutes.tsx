@@ -4,6 +4,7 @@ import MainLayout from '../layouts/MainLayout'
 import AdminEventsPage from '../pages/AdminEventsPage'
 import AdminPage from '../pages/AdminPage'
 import AlbumDetailsPage from '../pages/AlbumDetailsPage'
+import GalleryPage from '../pages/GalleryPage'
 import CreateAlbumPage from '../pages/CreateAlbumPage'
 import CreateEventPage from '../pages/CreateEventPage'
 import EditAlbumPage from '../pages/EditAlbumPage'
@@ -31,6 +32,7 @@ function AppRoutes() {
         <Route path="/events" element={<EventsPage />} />
         <Route path="/events/:eventId" element={<EventDetailsPage />} />
         <Route path="/albums/:albumId" element={<AlbumDetailsPage />} />
+        <Route path="/gallery" element={<GalleryPage />} />
         <Route path="/login" element={<LoginPage />} />
         <Route path="/register" element={<RegisterPage />} />
 

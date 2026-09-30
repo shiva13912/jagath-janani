@@ -1,16 +1,43 @@
-import type { Media, MediaUploadResult } from '../types/media'
+import type { MediaPage, MediaTypeFilter, MediaUploadResult } from '../types/media'
 import api from './api'
 
 // All media API calls live here. The files go to our backend, which sends them to Cloudinary.
 
-export async function getMediaByAlbum(albumId: string): Promise<Media[]> {
-  const response = await api.get<{ success: boolean; media: Media[] }>(`/albums/${encodeURIComponent(albumId)}/media`)
-  return response.data.media
+// Turns the page/type choices into query parameters. "all" is simply left out.
+function pageParams(options: { page: number; type: MediaTypeFilter; limit?: number }) {
+  return {
+    page: options.page,
+    ...(options.limit ? { limit: options.limit } : {}),
+    ...(options.type !== 'all' ? { type: options.type } : {}),
+  }
 }
 
-export async function getMediaById(id: string): Promise<Media> {
-  const response = await api.get<{ success: boolean; media: Media }>(`/media/${encodeURIComponent(id)}`)
-  return response.data.media
+// One page of an album's photos/videos, newest first (24 per page unless a limit is given)
+export async function getAlbumMediaPage(
+  albumId: string,
+  options: { page: number; type: MediaTypeFilter; limit?: number },
+): Promise<MediaPage> {
+  const response = await api.get<{ success: boolean } & MediaPage>(`/albums/${encodeURIComponent(albumId)}/media`, {
+    params: pageParams(options), // Axios turns this into ?page=1&type=image
+  })
+  return { media: response.data.media, pagination: response.data.pagination }
+}
+
+// One page of the public gallery. Empty filters mean "all events" / "all albums".
+export async function getGalleryMedia(options: {
+  page: number
+  type: MediaTypeFilter
+  eventId: string
+  albumId: string
+}): Promise<MediaPage> {
+  const response = await api.get<{ success: boolean } & MediaPage>('/media', {
+    params: {
+      ...pageParams(options),
+      ...(options.eventId ? { eventId: options.eventId } : {}),
+      ...(options.albumId ? { albumId: options.albumId } : {}),
+    },
+  })
+  return { media: response.data.media, pagination: response.data.pagination }
 }
 
 // Uploads files to an album. onProgress receives 0-100: the REAL share of bytes sent so far,

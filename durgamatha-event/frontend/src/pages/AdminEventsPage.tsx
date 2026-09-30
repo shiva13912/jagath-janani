@@ -36,9 +36,9 @@ function AdminEventsPage() {
     setSuccess('')
     try {
       await deleteEvent(eventToDelete.id)
-      setSuccess(`"${eventToDelete.title}" was deleted.`)
       setEventToDelete(null)
-      await loadEvents() // refresh the list
+      await loadEvents() // refresh the list first, so the message never shows next to the deleted event
+      setSuccess(`"${eventToDelete.title}" was deleted.`)
     } catch (err) {
       setError(getErrorMessage(err))
       setEventToDelete(null)

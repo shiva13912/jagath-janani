@@ -1,12 +1,12 @@
 import { useEffect, useState } from 'react'
-import { Link } from 'react-router'
+import AlbumCard from './AlbumCard'
 import { getAlbumsByEvent } from '../services/albumService'
-import type { Album } from '../types/album'
+import type { AlbumWithCover } from '../types/album'
 import { getErrorMessage } from '../utils/apiError'
 
 // The "Albums" section shown under an event on the public event details page
 function EventAlbums({ eventId }: { eventId: string }) {
-  const [albums, setAlbums] = useState<Album[]>([])
+  const [albums, setAlbums] = useState<AlbumWithCover[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
 
@@ -27,25 +27,10 @@ function EventAlbums({ eventId }: { eventId: string }) {
         <p className="mt-3 text-gray-600">No albums available for this event yet.</p>
       )}
 
-      {/* 1 column on phones, 2 on tablets and larger */}
-      <div className="mt-3 grid gap-4 sm:grid-cols-2">
+      {/* 1 column on phones, 2 on tablets, 3 on laptops */}
+      <div className="mt-3 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {albums.map((album) => (
-          <article key={album.id} className="flex flex-col overflow-hidden rounded-lg bg-white shadow">
-            {/* Placeholder instead of a cover image: real covers come with media in Phase 5 */}
-            <div className="flex h-28 items-center justify-center bg-orange-50 text-3xl text-orange-300" aria-hidden="true">
-              ▣
-            </div>
-            <div className="flex flex-1 flex-col p-4">
-              <h3 className="font-semibold">{album.name}</h3>
-              {album.description && <p className="mt-1 line-clamp-2 text-sm text-gray-600">{album.description}</p>}
-              <Link
-                to={`/albums/${album.id}`}
-                className="mt-3 self-start text-sm font-semibold text-orange-600 hover:underline"
-              >
-                View Album
-              </Link>
-            </div>
-          </article>
+          <AlbumCard key={album.id} album={album} />
         ))}
       </div>
     </section>

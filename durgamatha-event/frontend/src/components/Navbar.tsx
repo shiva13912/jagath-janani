@@ -6,6 +6,7 @@ import { ADMIN_ROLES, hasRole, TEAM_ROLES } from '../utils/roles'
 const publicItems = [
   { label: 'Home', path: '/' },
   { label: 'Events', path: '/events' },
+  { label: 'Gallery', path: '/gallery' },
 ]
 
 // Only shown when nobody is logged in

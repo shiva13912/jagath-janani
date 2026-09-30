@@ -22,3 +22,25 @@ export interface MediaUploadResult {
   media: Media[]
   errors: { filename: string; message: string }[]
 }
+
+// A media item with the name of its album (the gallery mixes items from many albums)
+export interface MediaWithAlbum extends Media {
+  album: { id: string; name: string; event_id: string } | null
+}
+
+// "all", "image" (photos) or "video"
+export type MediaTypeFilter = 'all' | 'image' | 'video'
+
+// Sent with every list of media
+export interface Pagination {
+  page: number
+  limit: number
+  total: number // matching items on ALL pages
+  totalPages: number // 0 when nothing matches
+}
+
+// One page of media, as returned by GET /api/albums/:albumId/media and GET /api/media
+export interface MediaPage {
+  media: MediaWithAlbum[]
+  pagination: Pagination
+}
