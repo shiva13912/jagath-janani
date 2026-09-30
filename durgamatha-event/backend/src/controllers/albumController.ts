@@ -4,6 +4,7 @@ import * as albumService from '../services/albumService'
 import * as eventService from '../services/eventService'
 import * as mediaService from '../services/mediaService'
 import { validateAlbumInput } from '../utils/albumValidation'
+import { validateAlbumQuery, validateCoverInput } from '../utils/galleryValidation'
 import { sendCloudinaryDeleteFailed } from './mediaController'
 import { isValidUuid } from '../utils/eventValidation'
 
@@ -18,9 +19,15 @@ function sendEventNotFound(res: Response) {
   res.status(404).json({ success: false, message: 'Event not found' })
 }
 
-// GET /api/albums — anyone
-export async function getAlbums(_req: Request, res: Response) {
-  const albums = await albumService.getAllAlbums()
+// GET /api/albums?search=diwali&eventId=... — anyone. Both filters are optional.
+export async function getAlbums(req: Request, res: Response) {
+  const { data: filters, errors } = validateAlbumQuery(req.query)
+  if (!filters) {
+    res.status(400).json({ success: false, message: 'Invalid filter', errors })
+    return
+  }
+
+  const albums = await albumService.getAllAlbums(filters)
   res.status(200).json({ success: true, albums })
 }
 
@@ -79,6 +86,39 @@ export async function updateAlbum(req: Request<{ id: string }>, res: Response) {
   if (!album) return sendAlbumNotFound(res)
 
   res.status(200).json({ success: true, message: 'Album updated', album })
+}
+
+// PUT /api/albums/:id/cover — TEAM_MEMBER and ADMIN (the same people who can edit albums).
+// Body: { "media_id": "<id of a photo/video in THIS album>" }, or { "media_id": null } to remove the cover.
+export async function setAlbumCover(req: Request<{ id: string }>, res: Response) {
+  if (!isValidUuid(req.params.id)) return sendAlbumNotFound(res)
+
+  const { data, errors } = validateCoverInput(req.body)
+  if (!data) {
+    res.status(400).json({ success: false, message: 'Invalid cover', errors })
+    return
+  }
+
+  const album = await albumService.getAlbumById(req.params.id)
+  if (!album) return sendAlbumNotFound(res)
+
+  if (data.mediaId) {
+    const media = await mediaService.getMediaById(data.mediaId)
+    if (!media) {
+      res.status(404).json({ success: false, message: 'Media not found' })
+      return
+    }
+    // An album's cover must be one of its own photos/videos
+    if (media.album_id !== album.id) {
+      res.status(400).json({ success: false, message: 'This photo or video belongs to a different album.' })
+      return
+    }
+  }
+
+  await albumService.setAlbumCover(album.id, data.mediaId)
+  // Send back the album with its new cover, ready to show
+  const updated = await albumService.getAlbumById(album.id)
+  res.status(200).json({ success: true, message: data.mediaId ? 'Album cover updated' : 'Album cover removed', album: updated })
 }
 
 // DELETE /api/albums/:id — ADMIN only

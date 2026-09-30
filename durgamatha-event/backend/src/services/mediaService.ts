@@ -1,6 +1,6 @@
 import { deleteAsset, deleteAssets, uploadFile, type CloudinaryResourceType } from '../config/cloudinary'
 import { supabaseAdmin } from '../config/supabase'
-import type { Media, NewMedia } from '../types/media'
+import type { Media, MediaWithAlbum, NewMedia } from '../types/media'
 import { ALLOWED_IMAGE_FORMATS, ALLOWED_VIDEO_FORMATS, FileRejectedError } from '../utils/mediaValidation'
 
 // All media work lives here: Cloudinary (the files) + PostgreSQL (the metadata).
@@ -11,17 +11,50 @@ export function albumFolder(eventId: string, albumId: string): string {
   return `durgamatha/events/${eventId}/albums/${albumId}`
 }
 
-// The media of one album, oldest first
-export async function getMediaByAlbum(albumId: string): Promise<Media[]> {
-  const { data, error } = await supabaseAdmin
-    .from('media')
-    .select('*')
-    .eq('album_id', albumId)
-    .order('created_at', { ascending: true })
-    .returns<Media[]>()
+// Columns for a media item plus its album's name. "!media_album_id_fkey" says which link to
+// follow (media.album_id), because albums also point to media through cover_media_id.
+const MEDIA_WITH_ALBUM = '*, album:albums!media_album_id_fkey(id, name, event_id)'
 
+export interface MediaFilters {
+  albumIds: string[] | null // null = every album
+  type: CloudinaryResourceType | null // null = photos and videos
+  page: number // starts at 1
+  limit: number
+}
+
+// One page of media, newest first, plus the total number of matching items.
+// Used by the album page (one album) and the gallery (all albums, or the albums of one event).
+export async function listMedia(filters: MediaFilters): Promise<{ media: MediaWithAlbum[]; total: number }> {
+  // An event with no albums can't have media: skip the query
+  if (filters.albumIds && filters.albumIds.length === 0) return { media: [], total: 0 }
+
+  // Page 1 = rows 0-23, page 2 = rows 24-47, ... (range is inclusive).
+  // count: 'exact' asks PostgreSQL for the total as well, in the same request.
+  // "id" is a tie-breaker so items uploaded in the same instant never swap pages.
+  const from = (filters.page - 1) * filters.limit
+  let query = supabaseAdmin.from('media').select(MEDIA_WITH_ALBUM, { count: 'exact' })
+  if (filters.albumIds) query = query.in('album_id', filters.albumIds)
+  if (filters.type) query = query.eq('resource_type', filters.type)
+
+  const { data, count, error } = await query
+    .order('created_at', { ascending: false })
+    .order('id', { ascending: true })
+    .range(from, from + filters.limit - 1)
+    .returns<MediaWithAlbum[]>()
+
+  if (error?.code === 'PGRST103') {
+    // A page after the last one: return an empty page, but still the real total,
+    // so the frontend can show "Page 9 of 3" and offer to go back
+    let countQuery = supabaseAdmin.from('media').select('id', { count: 'exact', head: true })
+    if (filters.albumIds) countQuery = countQuery.in('album_id', filters.albumIds)
+    if (filters.type) countQuery = countQuery.eq('resource_type', filters.type)
+
+    const counted = await countQuery
+    if (counted.error) throw new Error(`Could not count media: ${counted.error.message}`)
+    return { media: [], total: counted.count ?? 0 }
+  }
   if (error) throw new Error(`Could not load media: ${error.message}`)
-  return data
+  return { media: data, total: count ?? 0 }
 }
 
 // Returns null if there is no media with this id
@@ -86,6 +119,8 @@ export async function uploadMedia(options: {
 
 // Deletes one media item: the Cloudinary file FIRST, then the database row.
 // If Cloudinary fails, a CloudinaryError is thrown and the row is kept, so the admin can try again.
+// If this item is an album's cover, the database sets that album's cover_media_id back to
+// NULL by itself (the foreign key is "on delete set null", see schema.sql, Phase 6).
 // (If the row delete then fails, the next try finds the file already gone and removes the row.)
 export async function deleteMedia(media: Media): Promise<void> {
   await deleteAsset(media.cloudinary_public_id, media.resource_type)

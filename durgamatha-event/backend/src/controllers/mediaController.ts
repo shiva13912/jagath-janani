@@ -3,8 +3,9 @@ import fs from 'node:fs/promises'
 import { CloudinaryError } from '../config/cloudinary'
 import * as albumService from '../services/albumService'
 import * as mediaService from '../services/mediaService'
-import type { Media, MediaUploadError } from '../types/media'
+import type { Media, MediaUploadError, Pagination } from '../types/media'
 import { isValidUuid } from '../utils/eventValidation'
+import { validateMediaQuery } from '../utils/galleryValidation'
 import { FileRejectedError, getFileKind, validateMediaFile } from '../utils/mediaValidation'
 
 // Same pattern as the other controllers: errors thrown here go to the error handler.
@@ -36,15 +37,58 @@ export async function requireAlbum(req: Request<{ albumId: string }>, res: Respo
   next()
 }
 
-// GET /api/albums/:albumId/media — anyone
+// Builds the "pagination" part of a list response
+function paginationOf(page: number, limit: number, total: number): Pagination {
+  return { page, limit, total, totalPages: Math.ceil(total / limit) }
+}
+
+function sendInvalidQuery(res: Response, errors: string[]) {
+  res.status(400).json({ success: false, message: 'Invalid filter', errors })
+}
+
+// GET /api/albums/:albumId/media?page=1&limit=24&type=image — anyone.
+// One page of the album's photos/videos, newest first.
 export async function getAlbumMedia(req: Request<{ albumId: string }>, res: Response) {
   if (!isValidUuid(req.params.albumId)) return sendAlbumNotFound(res)
+
+  const { data: query, errors } = validateMediaQuery(req.query)
+  if (!query) return sendInvalidQuery(res, errors)
 
   const album = await albumService.getAlbumById(req.params.albumId)
   if (!album) return sendAlbumNotFound(res)
 
-  const media = await mediaService.getMediaByAlbum(album.id)
-  res.status(200).json({ success: true, media })
+  const { media, total } = await mediaService.listMedia({
+    albumIds: [album.id],
+    type: query.type,
+    page: query.page,
+    limit: query.limit,
+  })
+  res.status(200).json({ success: true, media, pagination: paginationOf(query.page, query.limit, total) })
+}
+
+// GET /api/media?eventId=...&albumId=...&type=video&page=1&limit=24 — anyone.
+// The public gallery: photos/videos from all albums, newest first, with optional filters.
+export async function getGalleryMedia(req: Request, res: Response) {
+  const { data: query, errors } = validateMediaQuery(req.query)
+  if (!query) return sendInvalidQuery(res, errors)
+
+  // Which albums to look in: null means all of them
+  let albumIds: string[] | null = null
+  if (query.eventId) {
+    albumIds = await albumService.getAlbumIdsByEvent(query.eventId)
+    // Album AND event chosen: the album only counts if it belongs to that event
+    if (query.albumId) albumIds = albumIds.includes(query.albumId) ? [query.albumId] : []
+  } else if (query.albumId) {
+    albumIds = [query.albumId]
+  }
+
+  const { media, total } = await mediaService.listMedia({
+    albumIds: albumIds,
+    type: query.type,
+    page: query.page,
+    limit: query.limit,
+  })
+  res.status(200).json({ success: true, media, pagination: paginationOf(query.page, query.limit, total) })
 }
 
 // GET /api/media/:id — anyone

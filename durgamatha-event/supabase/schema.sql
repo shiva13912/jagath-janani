@@ -161,8 +161,8 @@ create table public.albums (
   name            text not null,
   -- Optional: NULL when the album has no description
   description     text,
-  -- Will point to a media record in Phase 5 (Cloudinary).
-  -- No foreign key yet, because the media table does not exist yet.
+  -- The album's cover photo/video. The foreign key to media is added in the
+  -- Phase 6 section at the bottom, because the media table is created later.
   cover_media_id  uuid,
   -- The admin or team member who created the album. The backend fills this in from the logged-in user.
   created_by      uuid not null references public.profiles (id),
@@ -240,3 +240,16 @@ create trigger media_set_updated_at
 -- Same as events and albums: RLS on with NO policies, so only our Express backend
 -- (service-role key) can read or change media rows.
 alter table public.media enable row level security;
+
+-- =====================================================================
+-- PHASE 6: GALLERY (album covers)
+-- Run this section once in the Supabase SQL Editor.
+-- (If you already ran Phases 2-5, run ONLY this part.)
+-- =====================================================================
+
+-- albums.cover_media_id (added in Phase 4) now points to a real photo/video.
+-- "on delete set null": when the cover photo is deleted, PostgreSQL itself sets the
+-- album's cover back to NULL, so an album can never point to a deleted photo.
+alter table public.albums
+  add constraint albums_cover_media_id_fkey
+  foreign key (cover_media_id) references public.media (id) on delete set null;

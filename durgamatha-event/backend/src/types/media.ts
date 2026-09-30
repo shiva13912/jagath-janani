@@ -27,3 +27,16 @@ export interface MediaUploadError {
   filename: string
   message: string
 }
+
+// A media row with the name of its album (for the gallery, where items come from many albums)
+export interface MediaWithAlbum extends Media {
+  album: { id: string; name: string; event_id: string } | null
+}
+
+// Returned next to every paginated list
+export interface Pagination {
+  page: number
+  limit: number
+  total: number // number of items matching the filters, on all pages
+  totalPages: number // 0 when nothing matches
+}

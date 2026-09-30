@@ -5,7 +5,7 @@ export interface Album {
   event_id: string
   name: string
   description: string | null // null when the album has no description
-  cover_media_id: string | null // reserved for Phase 5 (media)
+  cover_media_id: string | null // the cover photo/video (media.id), or null
   created_by: string
   created_at: string
   updated_at: string
@@ -19,9 +19,21 @@ export interface AlbumEvent {
   location: string
 }
 
-// An album together with its event and the creator's name.
+// Just enough of the cover photo/video to show it on an album card
+export interface AlbumCover {
+  id: string
+  secure_url: string
+  resource_type: 'image' | 'video'
+}
+
+// An album with its cover (null when no cover is chosen)
+export interface AlbumWithCover extends Album {
+  cover: AlbumCover | null
+}
+
+// An album together with its event, the creator's name and its cover.
 // Returned by GET /api/albums and GET /api/albums/:id.
-export interface AlbumWithDetails extends Album {
+export interface AlbumWithDetails extends AlbumWithCover {
   event: AlbumEvent | null
   creator: { full_name: string } | null
 }
