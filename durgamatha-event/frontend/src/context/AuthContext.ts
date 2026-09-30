@@ -6,6 +6,7 @@ import type { LoginData, Profile, RegisterData } from '../types/auth'
 export interface AuthContextValue {
   user: User | null // the Supabase Auth user (id, email), or null when logged out
   profile: Profile | null // our profiles row (full name, role), or null
+  profileError: string // why the profile could not be loaded (e.g. backend down), or ''
   loading: boolean // true while we are still finding out who is logged in
   isAuthenticated: boolean
   login: (data: LoginData) => Promise<void>

@@ -12,7 +12,7 @@ interface ProtectedRouteProps {
 // Used in AppRoutes as a "layout route": <Route element={<ProtectedRoute />}> ...pages... </Route>
 // NOTE: this only improves the user experience. The real security check is on the backend.
 function ProtectedRoute({ allowedRoles }: ProtectedRouteProps) {
-  const { isAuthenticated, profile, loading } = useAuth()
+  const { isAuthenticated, profile, profileError, loading } = useAuth()
 
   // Still checking the saved session: don't redirect yet, or a refresh would kick the user out
   if (loading) {
@@ -23,7 +23,24 @@ function ProtectedRoute({ allowedRoles }: ProtectedRouteProps) {
     return <Navigate to="/login" replace />
   }
 
-  // Logged in, but the role is not allowed here (or the profile could not be loaded)
+  // The role could not be checked because the server could not be reached:
+  // say so, instead of wrongly showing "Access denied"
+  if (allowedRoles && !profile && profileError) {
+    return (
+      <div className="py-12 text-center">
+        <p className="mx-auto max-w-md rounded bg-red-50 px-3 py-2 text-red-700">{profileError}</p>
+        <button
+          type="button"
+          onClick={() => window.location.reload()}
+          className="mt-4 rounded border border-gray-300 px-4 py-2 text-gray-700 hover:bg-gray-50"
+        >
+          Try again
+        </button>
+      </div>
+    )
+  }
+
+  // Logged in, but the role is not allowed here (or the user has no profile)
   if (allowedRoles && !hasRole(profile?.role, allowedRoles)) {
     return <Navigate to="/unauthorized" replace />
   }
