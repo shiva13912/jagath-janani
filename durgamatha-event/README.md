@@ -2,7 +2,7 @@
 
 A web application for managing and sharing the events of Durgamatha. Visitors will be able to browse events and view event photos and videos, and organizers will be able to manage them.
 
-The project is being built in phases. Phase 1 (project foundation), Phase 2 (authentication and roles) and Phase 3 (event management) are done.
+The project is being built in phases. Phase 1 (project foundation), Phase 2 (authentication and roles), Phase 3 (event management) and Phase 4 (album management) are done.
 
 ## Tech stack
 
@@ -21,13 +21,13 @@ durgamatha-event/
 ├── frontend/                 React app (runs on http://localhost:5173)
 │   ├── public/               Static files (favicon)
 │   ├── src/
-│   │   ├── components/       Reusable UI pieces (Navbar, FormField, ProtectedRoute, EventForm)
+│   │   ├── components/       Reusable UI pieces (Navbar, FormField, ProtectedRoute, EventForm, AlbumForm, EventAlbums)
 │   │   ├── config/           Supabase client (public key only)
 │   │   ├── context/          AuthContext + AuthProvider (logged-in user state)
-│   │   ├── pages/            One file per page (Home, Events, Event details, Login, Register, Profile, Admin, admin event pages, ...)
+│   │   ├── pages/            One file per page (Home, Events, Event details, Login, Register, Profile, Admin, Album details, admin event pages, album management pages, ...)
 │   │   ├── layouts/          Shared page layout (navbar + footer)
 │   │   ├── routes/           All URL routes in one place
-│   │   ├── services/         API calls (Axios instance, auth, event and health services)
+│   │   ├── services/         API calls (Axios instance, auth, event, album and health services)
 │   │   ├── hooks/            Custom React hooks (useAuth)
 │   │   ├── types/            TypeScript types
 │   │   ├── utils/            Helpers (form validation, role lists, dates, API error messages)
@@ -44,9 +44,9 @@ durgamatha-event/
 │   │   ├── controllers/      Request handlers
 │   │   ├── middleware/       requireAuth, requireRole, not-found and error handling
 │   │   ├── routes/           API routes (all under /api)
-│   │   ├── services/         Database access (profiles, events)
-│   │   ├── types/            TypeScript types (roles, req.user, events)
-│   │   ├── utils/            Helpers (event validation)
+│   │   ├── services/         Database access (profiles, events, albums)
+│   │   ├── types/            TypeScript types (roles, req.user, events, albums)
+│   │   ├── utils/            Helpers (event and album validation)
 │   │   ├── app.ts            Creates and configures the Express app
 │   │   └── server.ts         Starts the server
 │   ├── .env.example
@@ -54,7 +54,7 @@ durgamatha-event/
 │   └── tsconfig.json
 │
 ├── supabase/
-│   └── schema.sql            Database schema: roles, profiles, events, security rules, triggers
+│   └── schema.sql            Database schema: roles, profiles, events, albums, security rules, triggers
 │
 ├── .gitignore
 ├── README.md
@@ -75,8 +75,9 @@ Do this once, before running the app.
    - Row Level Security: users can only **read** their own profile and cannot insert, update or delete profiles
    - a trigger that creates a `PUBLIC` profile for every new sign-up
    - the `events` table (Phase 3), with Row Level Security turned on
+   - the `albums` table (Phase 4), linked to events, with Row Level Security turned on
 
-   If you already ran the Phase 2 part earlier, run only the **Phase 3** section at the bottom of the file.
+   If you already ran earlier parts, run only the sections you haven't run yet (for example only the **Phase 4** section at the bottom of the file).
 6. **Keys:** in **Project Settings → API Keys** you'll find a *publishable* key (`sb_publishable_...`) and a *secret* key (`sb_secret_...`), or, on older projects, the legacy *anon* and *service_role* keys. The **Project URL** is under **Project Settings → Data API** (or the **Connect** button). Put them in the `.env` files as described below.
 
 ## Local development
@@ -219,7 +220,13 @@ On the backend:
 | GET | `/api/events/:id` | Anyone | One event |
 | POST | `/api/events` | `ADMIN` | Create an event |
 | PUT | `/api/events/:id` | `ADMIN` | Update an event |
-| DELETE | `/api/events/:id` | `ADMIN` | Delete an event |
+| DELETE | `/api/events/:id` | `ADMIN` | Delete an event (and its albums) |
+| GET | `/api/albums` | Anyone | List all albums (see [Album Management](#album-management)) |
+| GET | `/api/albums/:id` | Anyone | One album, with its event |
+| GET | `/api/events/:eventId/albums` | Anyone | Albums of one event |
+| POST | `/api/events/:eventId/albums` | `TEAM_MEMBER`, `ADMIN` | Create an album in an event |
+| PUT | `/api/albums/:id` | `TEAM_MEMBER`, `ADMIN` | Update an album |
+| DELETE | `/api/albums/:id` | `ADMIN` | Delete an album |
 
 The `/api/test/*` endpoints exist only to test the role system and will be removed later.
 
@@ -287,9 +294,96 @@ Admins open **Admin → Manage events** (`/admin/events`), which shows a table o
 
 - **Create:** click **Create Event** (`/admin/events/create`), fill in title, description, date and location, then **Create Event**.
 - **Update:** click **Edit** next to an event (`/admin/events/:id/edit`), change the fields, then **Save Changes**.
-- **Delete:** click **Delete**, then confirm in the "Delete event?" box. The list refreshes afterwards.
+- **Delete:** click **Delete**, then confirm in the "Delete event?" box. The list refreshes afterwards. **The event's albums are deleted too** (see [Album Management](#album-management)).
 
 These admin pages are protected in the frontend with the existing `ProtectedRoute` (ADMIN only), and the backend refuses non-admin requests regardless.
+
+## Album Management
+
+An album groups the photos and videos of one event. For example, the event *Durgamatha Festival 2026* can have the albums *Inauguration*, *Cultural Events*, *Food Distribution*, *Procession* and *Closing Ceremony*. In this phase an album holds only its own information; photos and videos are added in a later phase.
+
+### Database structure
+
+`albums` table (in `supabase/schema.sql`, section "PHASE 4: ALBUMS"):
+
+| Column | Type | Notes |
+| --- | --- | --- |
+| `id` | uuid | Primary key, generated automatically |
+| `event_id` | uuid | Required, references `events.id`. Taken from the URL when the album is created; cannot be changed afterwards |
+| `name` | text | Required |
+| `description` | text | Optional (`NULL` when empty) |
+| `cover_media_id` | uuid | Optional. Reserved for the album cover in a later phase; no foreign key yet because the media table does not exist |
+| `created_by` | uuid | Required, references `profiles.id`. Set by the backend from the logged-in user |
+| `created_at` | timestamptz | Set automatically |
+| `updated_at` | timestamptz | Updated automatically by a trigger |
+
+Row Level Security is **on with no policies**, exactly like `events`: only the Express API can read or change albums.
+
+### Event → Album relationship
+
+```
+events (1) ────────< albums (many)
+  Durgamatha Festival 2026
+    ├── Inauguration
+    ├── Cultural Events
+    └── Procession
+```
+
+- Each album belongs to exactly one event (`albums.event_id`); an event can have many albums.
+- `event_id` uses **`ON DELETE CASCADE`**: deleting an event also deletes its albums, so an album can never point to an event that no longer exists. There are no photos yet, so nothing else needs cleaning up. (When media is added, files stored outside the database will need their own cleanup before an event or album is deleted.)
+
+### API endpoints and permissions
+
+| Method | URL | Logged out / `PUBLIC` | `TEAM_MEMBER` | `ADMIN` |
+| --- | --- | --- | --- | --- |
+| GET | `/api/albums` | ✅ | ✅ | ✅ |
+| GET | `/api/albums/:id` | ✅ | ✅ | ✅ |
+| GET | `/api/events/:eventId/albums` | ✅ | ✅ | ✅ |
+| POST | `/api/events/:eventId/albums` | ❌ 401 / 403 | ✅ 201 | ✅ 201 |
+| PUT | `/api/albums/:id` | ❌ 401 / 403 | ✅ 200 | ✅ 200 |
+| DELETE | `/api/albums/:id` | ❌ 401 / 403 | ❌ 403 | ✅ 200 |
+
+- `GET /api/albums` returns all albums, newest first. `GET /api/albums` and `GET /api/albums/:id` include the album's `event` (`id`, `title`, `event_date`, `location`) and `creator` (display name only, never email or role).
+- `GET /api/events/:eventId/albums` returns the albums of one event in the order they were created, or `404` if the event does not exist.
+- POST and PUT take this JSON body. Any other fields (`id`, `event_id`, `created_by`, `created_at`, `updated_at`, ...) are ignored:
+
+  ```json
+  { "name": "Cultural Events", "description": "Photos and videos from cultural programs" }
+  ```
+
+- **Validation (backend):** `name` is required and cannot be blank (max 150 characters); `description` is optional (max 2000 characters; empty means `NULL`). Invalid data returns `400` with an `errors` list.
+- **Status codes:** `400` invalid data, `401` not logged in, `403` role not allowed, `404` album or event not found (including badly formed ids), `500` unexpected server error.
+- Permissions are enforced by the backend (`requireAuth` + `requireRole`), whatever the frontend shows.
+
+### How albums appear under events (everyone)
+
+- `/events/:eventId` has an **Albums** section with a card per album (a placeholder instead of a cover image) and a **View Album** link. With no albums it says "No albums available for this event yet."
+- `/albums/:albumId` shows the album name and description, its event, the event date and location, and "No photos or videos have been added yet." Unknown ids show "Album not found".
+
+### Managing albums
+
+Admins use **Admin → Manage albums** (`/admin/albums`). Team members use **Team → Manage albums** (`/team/albums`), which is the same page without the Delete button. The table shows Album, Event, Created By, Created At and Actions.
+
+- **Create an album:** click **Create Album**, choose the **Event** from the dropdown, enter the **Album Name** and an optional **Description**, then **Create Album**. (An event must exist first.)
+- **Edit an album:** click **Edit**, change the name or description, then **Save Changes**. The event is shown but cannot be changed.
+- **Delete an album (admins only):** click **Delete**, then confirm in the "Delete album?" box.
+
+### How to test album permissions
+
+1. Run the **Phase 4** section of `supabase/schema.sql` in the Supabase SQL Editor.
+2. **Admin:** create two albums in one event and one in another; edit one; delete one (cancel the confirmation once first). Delete an event and check its albums disappear from `/admin/albums`.
+3. **Team member** (change the role in **Table Editor → profiles**, then log out and back in): `/team/albums` works, you can create and edit, there is no Delete button, and `/admin/albums` shows "Access denied".
+4. **Public user / logged out:** you can see albums on event pages and album pages, but `/team/albums` and `/admin/albums` are denied (or send you to login).
+5. **API directly** (token from DevTools → Application → Local Storage → `sb-...-auth-token` → `access_token`):
+
+   ```bash
+   curl -i http://localhost:5000/api/albums                                                   # 200 for anyone
+   curl -i -X POST http://localhost:5000/api/events/<event-id>/albums \
+     -H "Authorization: Bearer <token>" -H "Content-Type: application/json" -d '{"name":"Procession"}'
+                                                                                              # 401 no token, 403 PUBLIC, 201 TEAM_MEMBER/ADMIN
+   curl -i -X DELETE http://localhost:5000/api/albums/<album-id> -H "Authorization: Bearer <token>"
+                                                                                              # 403 TEAM_MEMBER, 200 ADMIN
+   ```
 
 ## Current development phase
 
@@ -313,4 +407,10 @@ These admin pages are protected in the frontend with the existing `ProtectedRout
 - Event REST API with backend validation and admin-only create/update/delete
 - Public event list and details pages; admin list, create, edit and delete pages
 
-Features such as albums, media uploads and dashboards will be added in later phases.
+**Phase 4: Album management** (done)
+
+- `albums` table linked to events (`ON DELETE CASCADE`), with Row Level Security
+- Album REST API with backend validation: public reads, team members and admins create/update, admins delete
+- Albums section on the event page, a public album page, and album management pages for admins (`/admin/albums`) and team members (`/team/albums`)
+
+Features such as photo and video uploads, the gallery and dashboards will be added in later phases.
