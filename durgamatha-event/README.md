@@ -2,7 +2,7 @@
 
 A web application for managing and sharing the events of Durgamatha. Visitors will be able to browse events and view event photos and videos, and organizers will be able to manage them.
 
-The project is being built in phases. Phase 1 (project foundation), Phase 2 (authentication and roles), Phase 3 (event management) and Phase 4 (album management) are done.
+The project is being built in phases. Phase 1 (project foundation), Phase 2 (authentication and roles), Phase 3 (event management), Phase 4 (album management) and Phase 5 (photo and video management with Cloudinary) are done.
 
 ## Tech stack
 
@@ -11,7 +11,7 @@ The project is being built in phases. Phase 1 (project foundation), Phase 2 (aut
 | Frontend | React, TypeScript, Vite, Tailwind CSS, React Router, Axios, Recharts, Supabase JS client |
 | Backend | Node.js, Express.js, TypeScript (REST API), Supabase JS client |
 | Database & Auth | Supabase PostgreSQL, Supabase Auth (email + password) |
-| Media | Cloudinary *(planned)* |
+| Media | Cloudinary (photo and video storage), Multer (receives uploads on the backend) |
 | Deployment | Vercel (frontend), Render (backend), GitHub (source code) *(planned)* |
 
 ## Project structure
@@ -21,16 +21,16 @@ durgamatha-event/
 ├── frontend/                 React app (runs on http://localhost:5173)
 │   ├── public/               Static files (favicon)
 │   ├── src/
-│   │   ├── components/       Reusable UI pieces (Navbar, FormField, ProtectedRoute, EventForm, AlbumForm, EventAlbums)
+│   │   ├── components/       Reusable UI pieces (Navbar, FormField, ProtectedRoute, EventForm, AlbumForm, EventAlbums, MediaUploader, MediaGrid)
 │   │   ├── config/           Supabase client (public key only)
 │   │   ├── context/          AuthContext + AuthProvider (logged-in user state)
 │   │   ├── pages/            One file per page (Home, Events, Event details, Login, Register, Profile, Admin, Album details, admin event pages, album management pages, ...)
 │   │   ├── layouts/          Shared page layout (navbar + footer)
 │   │   ├── routes/           All URL routes in one place
-│   │   ├── services/         API calls (Axios instance, auth, event, album and health services)
+│   │   ├── services/         API calls (Axios instance, auth, event, album, media and health services)
 │   │   ├── hooks/            Custom React hooks (useAuth)
 │   │   ├── types/            TypeScript types
-│   │   ├── utils/            Helpers (form validation, role lists, dates, API error messages)
+│   │   ├── utils/            Helpers (form validation, role lists, dates, API error messages, media file checks)
 │   │   ├── assets/           Images and other assets (empty for now)
 │   │   ├── App.tsx
 │   │   └── main.tsx          Entry point
@@ -40,13 +40,13 @@ durgamatha-event/
 │
 ├── backend/                  Express API (runs on http://localhost:5000)
 │   ├── src/
-│   │   ├── config/           Environment variables + Supabase admin client
+│   │   ├── config/           Environment variables, Supabase admin client, Cloudinary client
 │   │   ├── controllers/      Request handlers
-│   │   ├── middleware/       requireAuth, requireRole, not-found and error handling
+│   │   ├── middleware/       requireAuth, requireRole, file upload (Multer), not-found and error handling
 │   │   ├── routes/           API routes (all under /api)
-│   │   ├── services/         Database access (profiles, events, albums)
-│   │   ├── types/            TypeScript types (roles, req.user, events, albums)
-│   │   ├── utils/            Helpers (event and album validation)
+│   │   ├── services/         Database and Cloudinary access (profiles, events, albums, media)
+│   │   ├── types/            TypeScript types (roles, req.user, events, albums, media)
+│   │   ├── utils/            Helpers (event, album and media file validation)
 │   │   ├── app.ts            Creates and configures the Express app
 │   │   └── server.ts         Starts the server
 │   ├── .env.example
@@ -54,7 +54,7 @@ durgamatha-event/
 │   └── tsconfig.json
 │
 ├── supabase/
-│   └── schema.sql            Database schema: roles, profiles, events, albums, security rules, triggers
+│   └── schema.sql            Database schema: roles, profiles, events, albums, media, security rules, triggers
 │
 ├── .gitignore
 ├── README.md
@@ -76,8 +76,9 @@ Do this once, before running the app.
    - a trigger that creates a `PUBLIC` profile for every new sign-up
    - the `events` table (Phase 3), with Row Level Security turned on
    - the `albums` table (Phase 4), linked to events, with Row Level Security turned on
+   - the `media` table (Phase 5), linked to albums, with Row Level Security turned on
 
-   If you already ran earlier parts, run only the sections you haven't run yet (for example only the **Phase 4** section at the bottom of the file).
+   If you already ran earlier parts, run only the sections you haven't run yet (for example only the **Phase 5** section at the bottom of the file).
 6. **Keys:** in **Project Settings → API Keys** you'll find a *publishable* key (`sb_publishable_...`) and a *secret* key (`sb_secret_...`), or, on older projects, the legacy *anon* and *service_role* keys. The **Project URL** is under **Project Settings → Data API** (or the **Connect** button). Put them in the `.env` files as described below.
 
 ## Local development
@@ -166,8 +167,11 @@ Only variables starting with `VITE_` are available in the frontend, and they are
 | `FRONTEND_URL` | `http://localhost:5173` | Frontend URL allowed by CORS |
 | `SUPABASE_URL` | `https://abcd1234.supabase.co` | Supabase Project URL |
 | `SUPABASE_SERVICE_ROLE_KEY` | `sb_secret_...` | **Secret** key with full database access. Backend only |
+| `CLOUDINARY_CLOUD_NAME` | `my-cloud` | Your Cloudinary cloud name |
+| `CLOUDINARY_API_KEY` | `123456789012345` | Cloudinary API key |
+| `CLOUDINARY_API_SECRET` | *(from Cloudinary)* | **Secret** Cloudinary API secret. Backend only |
 
-> ⚠️ The service-role (secret) key bypasses all database security rules. Keep it only in `backend/.env` (or your hosting provider's settings). Never put it in frontend code, the frontend `.env`, GitHub, or a chat message.
+> ⚠️ The service-role (secret) key bypasses all database security rules, and the Cloudinary API secret can upload and delete any file in your Cloudinary account. Keep both only in `backend/.env` (or your hosting provider's settings). Never put them in frontend code, the frontend `.env`, GitHub, or a chat message.
 
 ## Roles
 
@@ -220,13 +224,17 @@ On the backend:
 | GET | `/api/events/:id` | Anyone | One event |
 | POST | `/api/events` | `ADMIN` | Create an event |
 | PUT | `/api/events/:id` | `ADMIN` | Update an event |
-| DELETE | `/api/events/:id` | `ADMIN` | Delete an event (and its albums) |
+| DELETE | `/api/events/:id` | `ADMIN` | Delete an event (and its albums, photos and videos) |
 | GET | `/api/albums` | Anyone | List all albums (see [Album Management](#album-management)) |
 | GET | `/api/albums/:id` | Anyone | One album, with its event |
 | GET | `/api/events/:eventId/albums` | Anyone | Albums of one event |
 | POST | `/api/events/:eventId/albums` | `TEAM_MEMBER`, `ADMIN` | Create an album in an event |
 | PUT | `/api/albums/:id` | `TEAM_MEMBER`, `ADMIN` | Update an album |
-| DELETE | `/api/albums/:id` | `ADMIN` | Delete an album |
+| DELETE | `/api/albums/:id` | `ADMIN` | Delete an album (and its photos and videos) |
+| GET | `/api/albums/:albumId/media` | Anyone | Photos and videos of one album (see [Media Management](#media-management)) |
+| POST | `/api/albums/:albumId/media` | `TEAM_MEMBER`, `ADMIN` | Upload photos/videos to an album |
+| GET | `/api/media/:id` | Anyone | One photo or video |
+| DELETE | `/api/media/:id` | `ADMIN` | Delete a photo or video |
 
 The `/api/test/*` endpoints exist only to test the role system and will be removed later.
 
@@ -300,7 +308,7 @@ These admin pages are protected in the frontend with the existing `ProtectedRout
 
 ## Album Management
 
-An album groups the photos and videos of one event. For example, the event *Durgamatha Festival 2026* can have the albums *Inauguration*, *Cultural Events*, *Food Distribution*, *Procession* and *Closing Ceremony*. In this phase an album holds only its own information; photos and videos are added in a later phase.
+An album groups the photos and videos of one event. For example, the event *Durgamatha Festival 2026* can have the albums *Inauguration*, *Cultural Events*, *Food Distribution*, *Procession* and *Closing Ceremony*. Photos and videos are added to an album on its page (see [Media Management](#media-management)).
 
 ### Database structure
 
@@ -312,7 +320,7 @@ An album groups the photos and videos of one event. For example, the event *Durg
 | `event_id` | uuid | Required, references `events.id`. Taken from the URL when the album is created; cannot be changed afterwards |
 | `name` | text | Required |
 | `description` | text | Optional (`NULL` when empty) |
-| `cover_media_id` | uuid | Optional. Reserved for the album cover in a later phase; no foreign key yet because the media table does not exist |
+| `cover_media_id` | uuid | Optional. Reserved for choosing an album cover in a later phase; always `NULL` for now |
 | `created_by` | uuid | Required, references `profiles.id`. Set by the backend from the logged-in user |
 | `created_at` | timestamptz | Set automatically |
 | `updated_at` | timestamptz | Updated automatically by a trigger |
@@ -330,7 +338,7 @@ events (1) ────────< albums (many)
 ```
 
 - Each album belongs to exactly one event (`albums.event_id`); an event can have many albums.
-- `event_id` uses **`ON DELETE CASCADE`**: deleting an event also deletes its albums, so an album can never point to an event that no longer exists. There are no photos yet, so nothing else needs cleaning up. (When media is added, files stored outside the database will need their own cleanup before an event or album is deleted.)
+- `event_id` uses **`ON DELETE CASCADE`**: deleting an event also deletes its albums, so an album can never point to an event that no longer exists. Photos and videos are also removed: before the database delete, the backend deletes the files from Cloudinary (see [Deleting media](#deleting-media)).
 
 ### API endpoints and permissions
 
@@ -358,7 +366,7 @@ events (1) ────────< albums (many)
 ### How albums appear under events (everyone)
 
 - `/events/:eventId` has an **Albums** section with a card per album (a placeholder instead of a cover image) and a **View Album** link. With no albums it says "No albums available for this event yet."
-- `/albums/:albumId` shows the album name and description, its event, the event date and location, and "No photos or videos have been added yet." Unknown ids show "Album not found".
+- `/albums/:albumId` shows the album name and description, its event, the event date and location, and its photos and videos (or "No photos or videos have been added yet."). Unknown ids show "Album not found".
 
 ### Managing albums
 
@@ -383,6 +391,107 @@ Admins use **Admin → Manage albums** (`/admin/albums`). Team members use **Tea
                                                                                               # 401 no token, 403 PUBLIC, 201 TEAM_MEMBER/ADMIN
    curl -i -X DELETE http://localhost:5000/api/albums/<album-id> -H "Authorization: Bearer <token>"
                                                                                               # 403 TEAM_MEMBER, 200 ADMIN
+   ```
+
+## Media Management
+
+Photos and videos belong to an album. Team members and admins upload them on the album page, and everyone can view them there.
+
+Actual image/video files are stored in Cloudinary. PostgreSQL stores only media metadata and Cloudinary references.
+
+```
+events (1) ───< albums (1) ───< media (row in PostgreSQL) ────> file in Cloudinary
+```
+
+### Cloudinary setup
+
+1. Create a free account at https://cloudinary.com.
+2. On the Cloudinary **Dashboard** (or **Settings → API Keys**) copy the **Cloud name**, **API Key** and **API Secret**.
+3. Put them in `backend/.env` (never in the frontend):
+
+   ```
+   CLOUDINARY_CLOUD_NAME=your-cloud-name
+   CLOUDINARY_API_KEY=your-api-key
+   CLOUDINARY_API_SECRET=your-api-secret
+   ```
+
+4. Restart the backend. It refuses to start if one of the three is missing.
+
+Files are stored in Cloudinary in the folder `durgamatha/events/{eventId}/albums/{albumId}`, so every album's files stay together.
+
+### Database structure
+
+`media` table (in `supabase/schema.sql`, section "PHASE 5: MEDIA"):
+
+| Column | Type | Notes |
+| --- | --- | --- |
+| `id` | uuid | Primary key, generated automatically |
+| `album_id` | uuid | Required, references `albums.id` (`ON DELETE CASCADE`) |
+| `uploaded_by` | uuid | Required, references `profiles.id`. Set by the backend from the logged-in user |
+| `cloudinary_public_id` | text | Cloudinary's id for the file, needed to delete it. Unique |
+| `secure_url` | text | The https URL of the file |
+| `resource_type` | text | `image` or `video` |
+| `format` | text | `jpg`, `png`, `webp`, `mp4`, `webm` or `mov` |
+| `original_filename` | text | The file's name on the uploader's computer |
+| `file_size` | bigint | Size in bytes |
+| `width`, `height` | integer | Pixels (when Cloudinary reports them) |
+| `duration` | numeric | Seconds, videos only |
+| `created_at`, `updated_at` | timestamptz | Set automatically (`updated_at` by a trigger) |
+
+Row Level Security is **on with no policies**, like `events` and `albums`: only the Express API can read or change media.
+
+### Supported files and limits
+
+| Kind | Formats | Max size |
+| --- | --- | --- |
+| Photo | JPG / JPEG, PNG, WEBP | 10 MB |
+| Video | MP4, WEBM, MOV | 100 MB |
+
+- At most **10 files** per upload request.
+- The file extension **and** the browser-reported type must both match. After the upload, the backend also checks the type Cloudinary actually detected, so a text file renamed to `.jpg` is rejected and removed.
+- The frontend checks the same rules before uploading, but the backend always checks again.
+
+### How uploading works
+
+1. On `/albums/:albumId`, a team member or admin drags files onto the **Upload Photos/Videos** box (or clicks it to choose files). Each file is listed with its size and is marked "Ready" or with the reason it can't be uploaded.
+2. **Upload** sends the files **one at a time** with Axios, so each file shows its real progress bar. When a file reaches 100% it shows "processing..." while the backend sends it on to Cloudinary.
+3. The backend (Multer) saves the file in the server's temporary folder, uploads it to Cloudinary, saves a `media` row, and **always deletes the temporary file**. Nothing is kept on the Express server.
+4. If saving the row fails after the Cloudinary upload, the backend deletes the new Cloudinary file again so no unused file is left. (If even that fails, the server logs "ORPHANED CLOUDINARY FILE" with the public id so it can be removed by hand.)
+5. When all files are done, the grid reloads. Files that failed keep their error message.
+
+### API endpoints and permissions
+
+| Method | URL | Logged out / `PUBLIC` | `TEAM_MEMBER` | `ADMIN` |
+| --- | --- | --- | --- | --- |
+| GET | `/api/albums/:albumId/media` | ✅ | ✅ | ✅ |
+| GET | `/api/media/:id` | ✅ | ✅ | ✅ |
+| POST | `/api/albums/:albumId/media` | ❌ 401 / 403 | ✅ 201 | ✅ 201 |
+| DELETE | `/api/media/:id` | ❌ 401 / 403 | ❌ 403 | ✅ 200 |
+
+- **Upload:** `multipart/form-data` with the files in the field `files`. The response is `201` with `media` (the saved items) and `errors` (the files that failed, with a reason). If no file succeeded, it is `400`.
+- **Status codes:** `400` invalid or missing files, `401` not logged in, `403` role not allowed, `404` album or media not found, `413` file larger than 100 MB, `502` Cloudinary could not delete the files.
+- `uploaded_by`, `album_id` and the Cloudinary fields always come from the server, never from the request.
+
+### Deleting media
+
+- **One photo or video (admins only):** click **Delete** under it and confirm. The backend deletes the file from **Cloudinary first**, then the `media` row. If Cloudinary fails, the row is kept and the page shows "Could not delete the files from Cloudinary. Nothing was deleted, please try again.", so the database never points to a missing file without you knowing.
+- **An album or event:** before deleting it, the backend deletes all its files from Cloudinary. If that fails, nothing is deleted (`502`). Then the database delete removes the album(s) and, through `ON DELETE CASCADE`, their `media` rows.
+
+### How to test uploads and deletion
+
+1. Run the **Phase 5** section of `supabase/schema.sql` in the Supabase SQL Editor, and add the three Cloudinary values to `backend/.env`.
+2. **Team member:** open an album, upload a JPG, a PNG and a short MP4 together. Watch the progress bars, then check the grid, the Cloudinary **Media Library** (folder `durgamatha/events/...`) and the `media` table in Supabase.
+3. Try a GIF, a PDF and a photo over 10 MB: each is marked as not allowed and is not uploaded. There is no Delete button.
+4. **Admin:** delete a photo (cancel once first). It disappears from the page, the Cloudinary Media Library and the `media` table. Delete an album with photos and check its files are gone from Cloudinary.
+5. **Logged out / `PUBLIC`:** the photos and videos are visible, but there is no upload panel and no Delete button.
+6. **API directly:**
+
+   ```bash
+   curl -i -X POST http://localhost:5000/api/albums/<album-id>/media \
+     -H "Authorization: Bearer <token>" -F "files=@photo.jpg" -F "files=@clip.mp4"
+                                                                     # 401 no token, 403 PUBLIC, 201 TEAM_MEMBER/ADMIN
+   curl -i -X DELETE http://localhost:5000/api/media/<media-id> -H "Authorization: Bearer <token>"
+                                                                     # 403 TEAM_MEMBER, 200 ADMIN
    ```
 
 ## Current development phase
@@ -413,4 +522,10 @@ Admins use **Admin → Manage albums** (`/admin/albums`). Team members use **Tea
 - Album REST API with backend validation: public reads, team members and admins create/update, admins delete
 - Albums section on the event page, a public album page, and album management pages for admins (`/admin/albums`) and team members (`/team/albums`)
 
-Features such as photo and video uploads, the gallery and dashboards will be added in later phases.
+**Phase 5: Photo and video management** (done)
+
+- Photos and videos stored in Cloudinary; the `media` table stores only their metadata and Cloudinary references
+- Upload API for team members and admins (type and size checks, up to 10 files per request); admin-only delete
+- Upload panel with drag and drop and real progress on the album page, and a lazy-loaded photo/video grid
+
+Features such as the gallery, dashboards and deployment will be added in later phases.
