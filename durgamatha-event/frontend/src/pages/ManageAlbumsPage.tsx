@@ -130,6 +130,7 @@ function ManageAlbumsPage({ basePath }: ManageAlbumsPageProps) {
             <p className="mt-2 text-gray-600">
               Are you sure you want to delete "{albumToDelete.name}"? This cannot be undone.
             </p>
+            <p className="mt-2 text-sm text-gray-500">All photos and videos in this album will be deleted too.</p>
             <div className="mt-6 flex justify-end gap-2">
               <button
                 type="button"
