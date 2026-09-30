@@ -138,3 +138,50 @@ create trigger events_set_updated_at
 -- directly with the public anon key (for example from the browser console)
 -- cannot read, create, change or delete events. The only way in is our API.
 alter table public.events enable row level security;
+
+-- =====================================================================
+-- PHASE 4: ALBUMS
+-- Run this section once in the Supabase SQL Editor.
+-- (If you already ran the Phase 2 and Phase 3 sections, run ONLY this part.)
+-- =====================================================================
+
+-- ---------------------------------------------------------------------
+-- Albums table
+-- ---------------------------------------------------------------------
+
+-- An album groups the photos and videos of ONE event, e.g. "Inauguration" or
+-- "Cultural Events". One event can have many albums (Event 1 ──── * Albums).
+-- In this phase an album holds only its own information; media comes in Phase 5.
+create table public.albums (
+  id              uuid primary key default gen_random_uuid(),
+  -- The event this album belongs to. Required: every album belongs to exactly one event.
+  -- "on delete cascade": when an event is deleted, the database deletes its albums too,
+  -- so an album can never point to an event that no longer exists.
+  event_id        uuid not null references public.events (id) on delete cascade,
+  name            text not null,
+  -- Optional: NULL when the album has no description
+  description     text,
+  -- Will point to a media record in Phase 5 (Cloudinary).
+  -- No foreign key yet, because the media table does not exist yet.
+  cover_media_id  uuid,
+  -- The admin or team member who created the album. The backend fills this in from the logged-in user.
+  created_by      uuid not null references public.profiles (id),
+  created_at      timestamptz not null default now(),
+  updated_at      timestamptz not null default now()
+);
+
+-- Speeds up "all albums of this event", the most common album query
+create index albums_event_id_idx on public.albums (event_id);
+
+-- Reuse the updated_at function from Phase 2
+create trigger albums_set_updated_at
+  before update on public.albums
+  for each row execute function public.set_updated_at();
+
+-- ---------------------------------------------------------------------
+-- Security for albums
+-- ---------------------------------------------------------------------
+
+-- Same as events: RLS on with NO policies, so nobody can use the public anon key
+-- to read or change albums directly. Only our Express backend (service-role key) can.
+alter table public.albums enable row level security;
