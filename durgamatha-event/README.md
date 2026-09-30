@@ -21,16 +21,16 @@ durgamatha-event/
 ├── frontend/                 React app (runs on http://localhost:5173)
 │   ├── public/               Static files (favicon)
 │   ├── src/
-│   │   ├── components/       Reusable UI pieces (Navbar, FormField, ProtectedRoute, EventForm, AlbumForm, EventAlbums, AlbumCard, MediaUploader, MediaGrid, MediaCard, MediaViewer, Pagination, ...)
+│   │   ├── components/       Reusable UI pieces (Navbar, FormField, ProtectedRoute, EventForm, AlbumForm, EventAlbums, AlbumCard, MediaUploader, MediaGrid, MediaCard, MediaViewer, Pagination, StatCard, FinancialSummary, FinanceRecords, RecentActivity, charts/, ...)
 │   │   ├── config/           Supabase client (public key only)
 │   │   ├── context/          AuthContext + AuthProvider (logged-in user state)
-│   │   ├── pages/            One file per page (Home, Events, Event details, Login, Register, Profile, Admin, Gallery, Album details, admin event pages, album management pages, ...)
+│   │   ├── pages/            One file per page (Home, Events, Event details, Login, Register, Profile, Admin, Gallery, Album details, admin event pages, album management pages, dashboards, income and expense pages, ...)
 │   │   ├── layouts/          Shared page layout (navbar + footer)
 │   │   ├── routes/           All URL routes in one place
-│   │   ├── services/         API calls (Axios instance, auth, event, album, media and health services)
-│   │   ├── hooks/            Custom React hooks (useAuth, usePagedMedia)
+│   │   ├── services/         API calls (Axios instance, auth, event, album, media, finance and health services)
+│   │   ├── hooks/            Custom React hooks (useAuth, usePagedMedia, useApiData)
 │   │   ├── types/            TypeScript types
-│   │   ├── utils/            Helpers (form validation, role lists, dates, API error messages, media files and Cloudinary URLs, gallery filters)
+│   │   ├── utils/            Helpers (form validation, role lists, dates, API error messages, media files and Cloudinary URLs, gallery filters, INR money formatting)
 │   │   ├── assets/           Images and other assets (empty for now)
 │   │   ├── App.tsx
 │   │   └── main.tsx          Entry point
@@ -44,9 +44,9 @@ durgamatha-event/
 │   │   ├── controllers/      Request handlers
 │   │   ├── middleware/       requireAuth, requireRole, file upload (Multer), not-found and error handling
 │   │   ├── routes/           API routes (all under /api)
-│   │   ├── services/         Database and Cloudinary access (profiles, events, albums, media)
-│   │   ├── types/            TypeScript types (roles, req.user, events, albums, media)
-│   │   ├── utils/            Helpers (event, album, media file and gallery filter validation)
+│   │   ├── services/         Database and Cloudinary access (profiles, events, albums, media, income, expenses, dashboard totals)
+│   │   ├── types/            TypeScript types (roles, req.user, events, albums, media, finance)
+│   │   ├── utils/            Helpers (event, album, media file, gallery filter and money validation)
 │   │   ├── app.ts            Creates and configures the Express app
 │   │   └── server.ts         Starts the server
 │   ├── .env.example
@@ -54,7 +54,7 @@ durgamatha-event/
 │   └── tsconfig.json
 │
 ├── supabase/
-│   └── schema.sql            Database schema: roles, profiles, events, albums, media, security rules, triggers
+│   └── schema.sql            Database schema: roles, profiles, events, albums, media, income, expenses, dashboard functions, security rules, triggers
 │
 ├── .gitignore
 ├── README.md
@@ -78,8 +78,9 @@ Do this once, before running the app.
    - the `albums` table (Phase 4), linked to events, with Row Level Security turned on
    - the `media` table (Phase 5), linked to albums, with Row Level Security turned on
    - the album cover link (Phase 6): `albums.cover_media_id` → `media`, reset automatically when the cover is deleted
+   - the `income` and `expenses` tables and the two dashboard total functions (Phase 7), with Row Level Security turned on
 
-   If you already ran earlier parts, run only the sections you haven't run yet (for example only the **Phase 6** section at the bottom of the file).
+   If you already ran earlier parts, run only the sections you haven't run yet (for example only the **Phase 7** section at the bottom of the file).
 6. **Keys:** in **Project Settings → API Keys** you'll find a *publishable* key (`sb_publishable_...`) and a *secret* key (`sb_secret_...`), or, on older projects, the legacy *anon* and *service_role* keys. The **Project URL** is under **Project Settings → Data API** (or the **Connect** button). Put them in the `.env` files as described below.
 
 ## Local development
@@ -644,6 +645,120 @@ Setting a cover counts as editing the album, so it follows the album-edit permis
      -H "Content-Type: application/json" -d '{"media_id":"<media-id>"}'                  # 403 PUBLIC, 200 TEAM_MEMBER/ADMIN
    ```
 
+## Dashboard
+
+Admins and team members get a dashboard with the site's totals, the money of every event, and three charts. **Every number comes from PostgreSQL**; nothing is typed into the code.
+
+### Pages
+
+| Page | Who | What it shows |
+| --- | --- | --- |
+| `/admin/dashboard` | ADMIN | Summary cards, charts, recent activity, and **Add income / Add expense / Manage** buttons |
+| `/team/dashboard` | TEAM_MEMBER, ADMIN | The same cards, charts and recent activity, **view only** |
+| `/admin/income`, `/admin/income/create`, `/admin/income/:id/edit` | ADMIN | Income list with filters, and the add and edit forms |
+| `/admin/expenses`, `/admin/expenses/create`, `/admin/expenses/:id/edit` | ADMIN | Expense table (Expense, Event, Category, Amount, Date, Actions) with filters, and the forms |
+| `/team/finance` | TEAM_MEMBER, ADMIN | Income and expense lists with **no** add, edit or delete |
+| `/events/:eventId` | everyone (section: TEAM_MEMBER, ADMIN) | A **Finance and media** section with the event's income, expenses, balance, albums, photos and videos |
+
+The `/admin` and `/team` pages link to all of these. The public never sees financial data: the section is not shown to them, the finance requests are never sent, and the backend refuses them anyway (401 or 403).
+
+### Summary cards and charts
+
+- **Cards:** Total Events, Total Income, Total Expenses, Remaining Balance, Albums, Photos, Videos.
+- **Income vs Expenses:** a bar chart, one green and one red bar per event.
+- **Expenses by Category:** a donut chart, one colour per category.
+- **Financial Balance:** one bar per event (red when below zero). For a single event: Income, Expenses and Balance side by side.
+- **Recent activity:** the latest 5 expenses and 5 income records from the database.
+
+The **Event** dropdown switches everything to one event. It asks the backend for **only that event's** numbers (`/api/events/:id/dashboard-summary`), never for every event's data. The chosen event is kept in the URL (`?event=<id>`), so refresh and Back keep it. With all events selected, the charts show the 10 most recent events that have money recorded.
+
+While numbers load, grey placeholder boxes are shown instead of zeros, so nothing looks like real data before it arrives. Errors show a short message with **Try again**, never a raw database error. Charts also include their numbers as text for screen readers.
+
+The chart library (Recharts) is only downloaded when a dashboard is opened, so the public pages stay fast.
+
+### Database structure
+
+```
+events 1 ──── * income     (on delete cascade)
+events 1 ──── * expenses   (on delete cascade)
+profiles 1 ── * income / expenses   (created_by: the admin who added it)
+```
+
+| Column | income | expenses |
+| --- | --- | --- |
+| `id` | uuid, primary key | uuid, primary key |
+| `event_id` | required, references events | required, references events |
+| `title`, `description` | required, optional | required, optional |
+| `amount` | `numeric(12,2)`, `check (amount > 0)` | `numeric(12,2)`, `check (amount > 0)` |
+| `source` / `category` | `source` (e.g. Donation, Sponsor) | `category`, one of the 10 below |
+| `received_date` / `spent_date` | date | date |
+| `created_by`, `created_at`, `updated_at` | set by the server and database | set by the server and database |
+
+**Categories:** Food, Decoration, Transportation, Equipment, Venue, Printing, Sound & Lighting, Gifts, Maintenance, Other. They are a fixed list, so a database `check` is enough and no categories table is needed.
+
+**Why `ON DELETE CASCADE`?** Income and expenses belong to exactly one event. If an event is deleted, its money records would otherwise be left behind as "orphans" that still count in the site totals. The event delete confirmation says that its income and expenses are deleted too.
+
+**Remaining balance is never stored.** It is always calculated as total income minus total expenses, so it can never disagree with the real records.
+
+### Money handling
+
+- **Exact storage:** PostgreSQL stores amounts as `numeric(12,2)`, so they are exact (no floating-point rounding), up to ₹9,999,999,999.99.
+- **Validation:** the backend accepts `1500`, `"1500"` or `"1500.50"`. It rejects 0, negative amounts, text such as `"abc"`, more than 2 decimal places, `"1e5"` and `"12,000"` with **400**. The database also refuses 0 and negative amounts, even if the backend were bypassed.
+- **Exact API values:** the API returns every amount and total as exact text with 2 decimals, e.g. `"55000.00"`.
+- **Display:** the frontend shows amounts in Indian format, e.g. `₹1,00,000.00`.
+
+### How totals are calculated
+
+The Supabase API returns at most 1000 rows per request, so adding rows up in Node.js would silently give wrong totals once there are more records. Instead, two SQL functions in the Phase 7 section of `schema.sql` count and sum everything inside PostgreSQL:
+
+- `get_dashboard_summary()`
+- `get_event_summary(event_id)`
+
+The backend calls them with `supabaseAdmin.rpc(...)`. Execute permission is removed from `anon` and `authenticated`, so only the backend's service-role key can run them.
+
+### API endpoints and permissions
+
+| Method | Endpoint | Who |
+| --- | --- | --- |
+| GET | `/api/dashboard/summary` | ADMIN, TEAM_MEMBER |
+| GET | `/api/events/:eventId/dashboard-summary` | ADMIN, TEAM_MEMBER |
+| GET | `/api/events/:eventId/financial-summary` returns `{ totalIncome, totalExpenses, remainingBalance }` | ADMIN, TEAM_MEMBER |
+| GET | `/api/income`, `/api/income/:id`, `/api/events/:eventId/income` | ADMIN, TEAM_MEMBER |
+| POST | `/api/events/:eventId/income` | ADMIN |
+| PUT, DELETE | `/api/income/:id` | ADMIN |
+| GET | `/api/expenses`, `/api/expenses/:id`, `/api/events/:eventId/expenses` | ADMIN, TEAM_MEMBER |
+| POST | `/api/events/:eventId/expenses` | ADMIN |
+| PUT, DELETE | `/api/expenses/:id` | ADMIN |
+
+- **List filters:** `eventId`, `category` (expenses only), `from` and `to` (YYYY-MM-DD, inclusive), `page`, and `limit` (default 20, max 100). Lists are ordered newest date first.
+- **Status codes:**
+  - 400: invalid data or filters, with an `errors` list
+  - 401: not logged in
+  - 403: wrong role (PUBLIC users, or team members trying to change something)
+  - 404: unknown event or record
+- **Protected fields:** `created_by` is always the logged-in admin. `event_id` comes from the URL and cannot be changed by an edit. Anything else sent in the body (id, created_at, a "balance") is ignored.
+
+### How to test the dashboard
+
+1. Run the **Phase 7** section of `supabase/schema.sql` in the Supabase SQL Editor (only that section if Phases 2–6 are already done).
+2. As an admin, open **Admin → Dashboard**. With no records, the money cards show ₹0.00 and the charts say "No income or expenses recorded yet."
+3. Add income of **100000** to an event, then expenses of **20000**, **15000** and **10000**. The event shows Income ₹1,00,000.00, Expenses ₹45,000.00 and Balance ₹55,000.00.
+4. Delete the 10000 expense on **Manage expenses**. The dashboard shows ₹35,000.00 and ₹65,000.00.
+5. With two events (A: 100000 / 30000, B: 50000 / 10000), **All events** shows ₹1,50,000.00 / ₹40,000.00 / ₹1,10,000.00. Picking A shows ₹70,000.00, and B shows ₹40,000.00.
+6. Log in as a team member. **Team → Dashboard** and **Finance (view only)** work, but there are no Add, Edit or Delete buttons, and `/admin/expenses` redirects to "unauthorized".
+7. Check the backend, not just the buttons:
+
+   ```bash
+   curl http://localhost:5000/api/dashboard/summary                                  # 401
+   curl http://localhost:5000/api/dashboard/summary -H "Authorization: Bearer <public-token>"   # 403
+   curl -X POST http://localhost:5000/api/events/<event-id>/expenses \
+     -H "Authorization: Bearer <team-token>" -H "Content-Type: application/json" \
+     -d '{"title":"x","category":"Food","amount":"100","spent_date":"2026-10-01"}'     # 403
+   curl -X POST http://localhost:5000/api/events/<event-id>/expenses \
+     -H "Authorization: Bearer <admin-token>" -H "Content-Type: application/json" \
+     -d '{"title":"x","category":"Food","amount":"-5","spent_date":"2026-10-01"}'      # 400
+   ```
+
 ## Current development phase
 
 **Phase 1: Project foundation** (done)
@@ -685,4 +800,10 @@ Setting a cover counts as editing the album, so it follows the album-edit permis
 - Optimised Cloudinary thumbnails, lazy loading, no autoplay
 - Album covers, reset automatically when the cover photo is deleted
 
-Features such as dashboards and deployment will be added in later phases.
+**Phase 7: Dashboard and financial management** (done)
+
+- `income` and `expenses` tables (`numeric(12,2)`, positive amounts only, cascade with the event); the balance is always calculated, never stored
+- Finance REST API: team members and admins view, admins add, edit and delete; totals calculated inside PostgreSQL
+- Admin and team dashboards with summary cards, three Recharts charts, an event selector and recent activity; income and expense pages; a finance section on the event page
+
+Features such as UI polish and deployment will be added in later phases.

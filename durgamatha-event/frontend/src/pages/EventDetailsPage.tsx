@@ -1,14 +1,19 @@
 import { useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router'
 import EventAlbums from '../components/EventAlbums'
+import EventFinanceSection from '../components/EventFinanceSection'
+import { useAuth } from '../hooks/useAuth'
 import { getEventById } from '../services/eventService'
 import type { Event } from '../types/event'
 import { getErrorMessage, isNotFoundError } from '../utils/apiError'
 import { formatEventDate } from '../utils/date'
+import { hasRole, TEAM_ROLES } from '../utils/roles'
 
-// Public page: the full details of one event
+// Public page: the full details of one event.
+// Team members and admins also see the event's income, expenses and balance.
 function EventDetailsPage() {
   const { eventId = '' } = useParams() // the :eventId part of the URL
+  const { profile } = useAuth()
   const [event, setEvent] = useState<Event | null>(null)
   const [loading, setLoading] = useState(true)
   const [notFound, setNotFound] = useState(false)
@@ -58,6 +63,9 @@ function EventDetailsPage() {
           <p className="mt-6 whitespace-pre-line text-gray-800">{event.description}</p>
         </article>
       )}
+
+      {/* Only requested for team members and admins, so public visitors send no finance request at all */}
+      {event && profile && hasRole(profile.role, TEAM_ROLES) && <EventFinanceSection eventId={event.id} role={profile.role} />}
 
       {/* Albums are loaded separately, once we know the event exists */}
       {event && <EventAlbums eventId={event.id} />}

@@ -253,3 +253,166 @@ alter table public.media enable row level security;
 alter table public.albums
   add constraint albums_cover_media_id_fkey
   foreign key (cover_media_id) references public.media (id) on delete set null;
+
+-- =====================================================================
+-- PHASE 7: FINANCE (income and expenses) AND DASHBOARD TOTALS
+-- Run this section once in the Supabase SQL Editor.
+-- (If you already ran Phases 2-6, run ONLY this part.)
+-- =====================================================================
+
+-- ---------------------------------------------------------------------
+-- Income table: money received for an event (donations, sponsors, ...)
+-- ---------------------------------------------------------------------
+
+create table public.income (
+  id             uuid primary key default gen_random_uuid(),
+  -- The event this money belongs to. "on delete cascade": deleting an event deletes
+  -- its income too, so no "orphan" money is left that would still count in the totals.
+  event_id       uuid not null references public.events (id) on delete cascade,
+  title          text not null,
+  description    text, -- optional
+  -- numeric(12,2) stores money EXACTLY (no floating-point rounding), e.g. 10000.50.
+  -- Up to 9,999,999,999.99. The check makes PostgreSQL itself refuse 0 and negative amounts.
+  amount         numeric(12,2) not null check (amount > 0),
+  source         text not null, -- e.g. "Donation", "Sponsor"
+  received_date  date not null,
+  -- The admin who added it. The backend fills this in from the logged-in user.
+  created_by     uuid not null references public.profiles (id),
+  created_at     timestamptz not null default now(),
+  updated_at     timestamptz not null default now()
+);
+
+-- Speeds up "all income of this event" and the per-event totals
+create index income_event_id_idx on public.income (event_id);
+
+create trigger income_set_updated_at
+  before update on public.income
+  for each row execute function public.set_updated_at();
+
+-- ---------------------------------------------------------------------
+-- Expenses table: money spent for an event
+-- ---------------------------------------------------------------------
+
+create table public.expenses (
+  id           uuid primary key default gen_random_uuid(),
+  event_id     uuid not null references public.events (id) on delete cascade,
+  title        text not null,
+  description  text,
+  amount       numeric(12,2) not null check (amount > 0),
+  -- A fixed list, so a check is enough (no separate categories table needed)
+  category     text not null check (category in (
+                 'Food', 'Decoration', 'Transportation', 'Equipment', 'Venue',
+                 'Printing', 'Sound & Lighting', 'Gifts', 'Maintenance', 'Other')),
+  spent_date   date not null,
+  created_by   uuid not null references public.profiles (id),
+  created_at   timestamptz not null default now(),
+  updated_at   timestamptz not null default now()
+);
+
+create index expenses_event_id_idx on public.expenses (event_id);
+
+create trigger expenses_set_updated_at
+  before update on public.expenses
+  for each row execute function public.set_updated_at();
+
+-- Same as the other tables: RLS on with NO policies, so only our Express backend
+-- (service-role key) can read or change financial records.
+alter table public.income enable row level security;
+alter table public.expenses enable row level security;
+
+-- NOTE: there is deliberately NO "remaining balance" column anywhere.
+-- The balance is always calculated as (total income - total expenses),
+-- so it can never get out of step with the real records.
+
+-- ---------------------------------------------------------------------
+-- Dashboard totals, calculated inside PostgreSQL
+-- ---------------------------------------------------------------------
+
+-- Why SQL functions? The Supabase API returns at most 1000 rows per request, so adding
+-- up rows in Node.js would give wrong totals once there are more records. PostgreSQL
+-- counts and sums everything itself and returns just the answer.
+-- Money totals are returned as text like "55000.00" so they stay exact.
+
+-- Totals for ONE event. Returns NULL when the event does not exist (the API answers 404).
+create function public.get_event_summary(p_event_id uuid)
+returns json
+language sql
+stable
+set search_path = ''
+as $$
+  with
+    inc as (select coalesce(sum(amount), 0) as total from public.income where event_id = p_event_id),
+    exp as (select coalesce(sum(amount), 0) as total from public.expenses where event_id = p_event_id)
+  select json_build_object(
+    'eventId', e.id,
+    'eventTitle', e.title,
+    'totalAlbums', (select count(*) from public.albums a where a.event_id = e.id),
+    'totalPhotos', (select count(*) from public.media m join public.albums a on a.id = m.album_id
+                    where a.event_id = e.id and m.resource_type = 'image'),
+    'totalVideos', (select count(*) from public.media m join public.albums a on a.id = m.album_id
+                    where a.event_id = e.id and m.resource_type = 'video'),
+    'totalIncome', inc.total::numeric(16,2)::text,
+    'totalExpenses', exp.total::numeric(16,2)::text,
+    'remainingBalance', (inc.total - exp.total)::numeric(16,2)::text,
+    'expensesByCategory', (
+      select coalesce(json_agg(json_build_object('category', c.category, 'total', c.total::numeric(16,2)::text)
+                               order by c.total desc), '[]'::json)
+      from (select category, sum(amount) as total from public.expenses
+            where event_id = e.id group by category) c
+    )
+  )
+  from public.events e, inc, exp
+  where e.id = p_event_id;
+$$;
+
+-- Totals for the whole site, plus the numbers for the dashboard charts.
+create function public.get_dashboard_summary()
+returns json
+language sql
+stable
+set search_path = ''
+as $$
+  with
+    inc as (select coalesce(sum(amount), 0) as total from public.income),
+    exp as (select coalesce(sum(amount), 0) as total from public.expenses),
+    -- Income and expenses per event, for the "Income vs Expenses" and "Balance" charts
+    per_event as (
+      select e.id, e.title, e.event_date,
+             coalesce((select sum(amount) from public.income i where i.event_id = e.id), 0) as income,
+             coalesce((select sum(amount) from public.expenses x where x.event_id = e.id), 0) as expenses
+      from public.events e
+    )
+  select json_build_object(
+    'totalEvents', (select count(*) from public.events),
+    'totalAlbums', (select count(*) from public.albums),
+    'totalPhotos', (select count(*) from public.media where resource_type = 'image'),
+    'totalVideos', (select count(*) from public.media where resource_type = 'video'),
+    'totalIncome', inc.total::numeric(16,2)::text,
+    'totalExpenses', exp.total::numeric(16,2)::text,
+    'remainingBalance', (inc.total - exp.total)::numeric(16,2)::text,
+    'expensesByCategory', (
+      select coalesce(json_agg(json_build_object('category', c.category, 'total', c.total::numeric(16,2)::text)
+                               order by c.total desc), '[]'::json)
+      from (select category, sum(amount) as total from public.expenses group by category) c
+    ),
+    -- The 10 most recent events that have any income or expenses (a chart with
+    -- hundreds of bars would be unreadable; pick an event in the dashboard for the rest)
+    'events', (
+      select coalesce(json_agg(json_build_object(
+               'eventId', p.id, 'eventTitle', p.title,
+               'totalIncome', p.income::numeric(16,2)::text,
+               'totalExpenses', p.expenses::numeric(16,2)::text,
+               'remainingBalance', (p.income - p.expenses)::numeric(16,2)::text)
+             order by p.event_date desc, p.id), '[]'::json)
+      from (select * from per_event where income > 0 or expenses > 0
+            order by event_date desc, id limit 10) p
+    )
+  )
+  from inc, exp;
+$$;
+
+-- Only our backend (service-role key) may run these. Nobody can call them with the public anon key.
+revoke execute on function public.get_event_summary(uuid) from public, anon, authenticated;
+revoke execute on function public.get_dashboard_summary() from public, anon, authenticated;
+grant execute on function public.get_event_summary(uuid) to service_role;
+grant execute on function public.get_dashboard_summary() to service_role;

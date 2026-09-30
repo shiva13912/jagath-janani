@@ -112,7 +112,7 @@ function AdminEventsPage() {
             <p className="mt-2 text-gray-600">
               Are you sure you want to delete "{eventToDelete.title}"? This cannot be undone.
             </p>
-            <p className="mt-2 text-sm text-gray-500">All albums of this event and all their photos and videos will be deleted too.</p>
+            <p className="mt-2 text-sm text-gray-500">All albums of this event and all their photos and videos will be deleted too, and so will all of its income and expense records.</p>
             <div className="mt-6 flex justify-end gap-2">
               <button
                 type="button"
