@@ -90,3 +90,38 @@ revoke execute on function public.handle_new_user() from public, anon, authentic
 create trigger on_auth_user_created
   after insert on auth.users
   for each row execute function public.handle_new_user();
+
+
+-- =====================================================================
+-- Phase 3: events
+-- =====================================================================
+
+-- ---------------------------------------------------------------------
+-- Step 2: the events table
+-- ---------------------------------------------------------------------
+
+create table public.events (
+  -- gen_random_uuid() creates a new random id automatically for each event
+  id              uuid primary key default gen_random_uuid(),
+  title           text not null,
+  description     text not null,
+  -- DATE only (no time), e.g. 2026-10-15
+  event_date      date not null,
+  location        text not null,
+  -- Will point to a media record in the Cloudinary phase.
+  -- No foreign key yet, because the media table does not exist yet.
+  cover_media_id  uuid,
+  -- The admin who created the event. The backend fills this in from the logged-in user.
+  -- A user who still has events cannot be deleted (the database refuses), so we never lose track of the creator.
+  created_by      uuid not null references public.profiles (id),
+  created_at      timestamptz not null default now(),
+  updated_at      timestamptz not null default now()
+);
+
+-- Speeds up sorting and filtering events by date
+create index events_event_date_idx on public.events (event_date);
+
+-- Reuse the updated_at function from Phase 2
+create trigger events_set_updated_at
+  before update on public.events
+  for each row execute function public.set_updated_at();
