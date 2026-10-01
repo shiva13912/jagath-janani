@@ -12,8 +12,14 @@ export async function register({ fullName, email, password }: RegisterData): Pro
   const { data, error } = await supabase.auth.signUp({
     email,
     password,
-    // Saved as user metadata; the trigger copies it into profiles.full_name
-    options: { data: { full_name: fullName } },
+    options: {
+      // Saved as user metadata; the trigger copies it into profiles.full_name
+      data: { full_name: fullName },
+      // If "Confirm email" is on, the link in the email brings the user back to THIS website
+      // (localhost while developing, the Vercel address in production). The address must also be
+      // listed under Supabase -> Authentication -> URL Configuration -> Redirect URLs.
+      emailRedirectTo: `${window.location.origin}/login`,
+    },
   })
   if (error) throw new Error(error.message)
   return data.session !== null

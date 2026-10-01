@@ -19,6 +19,6 @@ export function errorHandler(err: HttpError, _req: Request, res: Response, _next
     success: false,
     message: statusCode >= 500 ? 'Something went wrong on the server' : err.message,
     // Only show the real error message while developing, never in production
-    ...(env.nodeEnv === 'development' && statusCode >= 500 && { error: err.message }),
+    ...(env.isDevelopment && statusCode >= 500 && { error: err.message }),
   })
 }

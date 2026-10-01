@@ -9,6 +9,9 @@
     "build": "tsc",
     "start": "node dist/server.js"
   },
+  "engines": {
+    "node": ">=20.19"
+  },
   "dependencies": {
     "@supabase/supabase-js": "^2.117.2",
     "cloudinary": "^2.11.0",

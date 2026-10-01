@@ -2,7 +2,7 @@
 
 A web application for managing and sharing the events of Durgamatha. Visitors will be able to browse events and view event photos and videos, and organizers will be able to manage them.
 
-The project is being built in phases. Phase 1 (project foundation), Phase 2 (authentication and roles), Phase 3 (event management), Phase 4 (album management), Phase 5 (photo and video management with Cloudinary) and Phase 6 (gallery and media viewer) are done.
+The project is being built in phases. Phase 1 (project foundation), Phase 2 (authentication and roles), Phase 3 (event management), Phase 4 (album management), Phase 5 (photo and video management with Cloudinary), Phase 6 (gallery and media viewer), Phase 7 (dashboards and finances) and Phase 8 (UI polish) are done. Phase 9 (deployment) is prepared: see [Deployment](#deployment).
 
 ## Tech stack
 
@@ -12,7 +12,7 @@ The project is being built in phases. Phase 1 (project foundation), Phase 2 (aut
 | Backend | Node.js, Express.js, TypeScript (REST API), Supabase JS client |
 | Database & Auth | Supabase PostgreSQL, Supabase Auth (email + password) |
 | Media | Cloudinary (photo and video storage), Multer (receives uploads on the backend) |
-| Deployment | Vercel (frontend), Render (backend), GitHub (source code) *(planned)* |
+| Deployment | Vercel (frontend), Render (backend), GitHub (source code) |
 
 ## Project structure
 
@@ -21,21 +21,22 @@ durgamatha-event/
 ├── frontend/                 React app (runs on http://localhost:5173)
 │   ├── public/               Static files (favicon)
 │   ├── src/
-│   │   ├── components/       Reusable UI pieces (Navbar, FormField, ProtectedRoute, EventForm, AlbumForm, EventAlbums, AlbumCard, MediaUploader, MediaGrid, MediaCard, MediaViewer, Pagination, StatCard, FinancialSummary, FinanceRecords, RecentActivity, charts/, ...)
-│   │   ├── config/           Supabase client (public key only)
+│   │   ├── components/       Reusable UI pieces (ui/ design system: Button, Card, Alert, Badge, Field, PageHeader, ConfirmDialog, ResponsiveTable, Spinner, StateMessages; Navbar, Footer, ErrorBoundary, ProtectedRoute, EventCard, EventForm, AlbumForm, EventAlbums, AlbumCard, MediaUploader, MediaGrid, MediaCard, MediaViewer, Pagination, StatCard, FinancialSummary, FinanceRecords, RecentActivity, charts/, ...)
+│   │   ├── config/           Supabase client (public key only) and siteInfo.ts (name, About text, contact details)
 │   │   ├── context/          AuthContext + AuthProvider (logged-in user state)
-│   │   ├── pages/            One file per page (Home, Events, Event details, Login, Register, Profile, Admin, Gallery, Album details, admin event pages, album management pages, dashboards, income and expense pages, ...)
+│   │   ├── pages/            One file per page (Home, Events, Event details, About, Contact, Login, Register, Profile, Gallery, Album details, admin event pages, album management pages, dashboards, income and expense pages, ...)
 │   │   ├── layouts/          Shared page layout (navbar + footer)
 │   │   ├── routes/           All URL routes in one place
-│   │   ├── services/         API calls (Axios instance, auth, event, album, media, finance and health services)
-│   │   ├── hooks/            Custom React hooks (useAuth, usePagedMedia, useApiData)
+│   │   ├── services/         API calls (Axios instance, auth, event, album, media and finance services)
+│   │   ├── hooks/            Custom React hooks (useAuth, usePagedMedia, useApiData, usePageTitle, useFlashMessage)
 │   │   ├── types/            TypeScript types
-│   │   ├── utils/            Helpers (form validation, role lists, dates, API error messages, media files and Cloudinary URLs, gallery filters, INR money formatting)
+│   │   ├── utils/            Helpers (form validation, role lists, dates, API error messages, media files and Cloudinary URLs, gallery filters, INR money formatting, navigation menus)
 │   │   ├── assets/           Images and other assets (empty for now)
 │   │   ├── App.tsx
 │   │   └── main.tsx          Entry point
 │   ├── .env.example
 │   ├── package.json
+│   ├── vercel.json           Vercel setting: every URL opens the React app
 │   └── vite.config.ts
 │
 ├── backend/                  Express API (runs on http://localhost:5000)
@@ -132,7 +133,7 @@ cd frontend
 npm run dev
 ```
 
-Open http://localhost:5173. The Home page shows **API status: online** when the backend is running.
+Open http://localhost:5173.
 
 You can also start either app from the `durgamatha-event` folder with `npm run dev:backend` or `npm run dev:frontend`.
 
@@ -154,7 +155,7 @@ Each app reads its settings from a `.env` file, which is never committed to Git.
 
 | Variable | Example | Description |
 | --- | --- | --- |
-| `VITE_API_URL` | `http://localhost:5000` | URL of the backend API |
+| `VITE_API_URL` | `http://localhost:5000` | URL of the backend API, without `/api` and without a `/` at the end. Required |
 | `VITE_SUPABASE_URL` | `https://abcd1234.supabase.co` | Supabase Project URL |
 | `VITE_SUPABASE_ANON_KEY` | `sb_publishable_...` | Supabase publishable (anon) key. Safe to be public |
 
@@ -164,9 +165,9 @@ Only variables starting with `VITE_` are available in the frontend, and they are
 
 | Variable | Example | Description |
 | --- | --- | --- |
-| `PORT` | `5000` | Port the API server listens on |
-| `NODE_ENV` | `development` | `development` or `production` |
-| `FRONTEND_URL` | `http://localhost:5173` | Frontend URL allowed by CORS |
+| `PORT` | `5000` | Port the API server listens on. Not needed on Render, which sets it |
+| `NODE_ENV` | `development` | `development` on your computer, `production` on Render. If missing, the server behaves as production |
+| `FRONTEND_URL` | `http://localhost:5173` | Website address allowed by CORS (no `/` at the end). Required in production |
 | `SUPABASE_URL` | `https://abcd1234.supabase.co` | Supabase Project URL |
 | `SUPABASE_SERVICE_ROLE_KEY` | `sb_secret_...` | **Secret** key with full database access. Backend only |
 | `CLOUDINARY_CLOUD_NAME` | `my-cloud` | Your Cloudinary cloud name |
@@ -302,7 +303,7 @@ Row Level Security is **on with no policies**: the browser cannot read or change
 
 ### Managing events (admins)
 
-Admins open **Admin → Manage events** (`/admin/events`), which shows a table of events with **Edit** and **Delete** actions.
+Admins open **Manage → Events** (`/admin/events`), which shows a table of events with **Edit** and **Delete** actions.
 
 - **Create:** click **Create Event** (`/admin/events/create`), fill in title, description, date and location, then **Create Event**.
 - **Update:** click **Edit** next to an event (`/admin/events/:id/edit`), change the fields, then **Save Changes**.
@@ -374,7 +375,7 @@ events (1) ────────< albums (many)
 
 ### Managing albums
 
-Admins use **Admin → Manage albums** (`/admin/albums`). Team members use **Team → Manage albums** (`/team/albums`), which is the same page without the Delete button. The table shows Album, Event, Created By, Created At and Actions.
+Admins use **Manage → Albums** (`/admin/albums`). Team members use **Manage → Albums** too (`/team/albums`), which is the same page without the Delete button. The table shows Album, Event, Created By, Created At and Actions.
 
 - **Create an album:** click **Create Album**, choose the **Event** from the dropdown, enter the **Album Name** and an optional **Description**, then **Create Album**. (An event must exist first.)
 - **Edit an album:** click **Edit**, change the name or description, then **Save Changes**. The event is shown but cannot be changed.
@@ -660,7 +661,7 @@ Admins and team members get a dashboard with the site's totals, the money of eve
 | `/team/finance` | TEAM_MEMBER, ADMIN | Income and expense lists with **no** add, edit or delete |
 | `/events/:eventId` | everyone (section: TEAM_MEMBER, ADMIN) | A **Finance and media** section with the event's income, expenses, balance, albums, photos and videos |
 
-The `/admin` and `/team` pages link to all of these. The public never sees financial data: the section is not shown to them, the finance requests are never sent, and the backend refuses them anyway (401 or 403).
+The **Manage** menu in the navbar links to all of these, and `/admin` and `/team` open the dashboards. The public never sees financial data: the section is not shown to them, the finance requests are never sent, and the backend refuses them anyway (401 or 403).
 
 ### Summary cards and charts
 
@@ -705,7 +706,7 @@ profiles 1 ── * income / expenses   (created_by: the admin who added it)
 - **Exact storage:** PostgreSQL stores amounts as `numeric(12,2)`, so they are exact (no floating-point rounding), up to ₹9,999,999,999.99.
 - **Validation:** the backend accepts `1500`, `"1500"` or `"1500.50"`. It rejects 0, negative amounts, text such as `"abc"`, more than 2 decimal places, `"1e5"` and `"12,000"` with **400**. The database also refuses 0 and negative amounts, even if the backend were bypassed.
 - **Exact API values:** the API returns every amount and total as exact text with 2 decimals, e.g. `"55000.00"`.
-- **Display:** the frontend shows amounts in Indian format, e.g. `₹1,00,000.00`.
+- **Display:** the frontend shows amounts in Indian format, e.g. `₹1,00,000`. Paise are shown only when there are some, e.g. `₹15,500.50`.
 
 ### How totals are calculated
 
@@ -741,11 +742,11 @@ The backend calls them with `supabaseAdmin.rpc(...)`. Execute permission is remo
 ### How to test the dashboard
 
 1. Run the **Phase 7** section of `supabase/schema.sql` in the Supabase SQL Editor (only that section if Phases 2–6 are already done).
-2. As an admin, open **Admin → Dashboard**. With no records, the money cards show ₹0.00 and the charts say "No income or expenses recorded yet."
-3. Add income of **100000** to an event, then expenses of **20000**, **15000** and **10000**. The event shows Income ₹1,00,000.00, Expenses ₹45,000.00 and Balance ₹55,000.00.
-4. Delete the 10000 expense on **Manage expenses**. The dashboard shows ₹35,000.00 and ₹65,000.00.
-5. With two events (A: 100000 / 30000, B: 50000 / 10000), **All events** shows ₹1,50,000.00 / ₹40,000.00 / ₹1,10,000.00. Picking A shows ₹70,000.00, and B shows ₹40,000.00.
-6. Log in as a team member. **Team → Dashboard** and **Finance (view only)** work, but there are no Add, Edit or Delete buttons, and `/admin/expenses` redirects to "unauthorized".
+2. As an admin, open **Manage → Dashboard**. With no records, the money cards show ₹0 and the charts say "No income or expenses recorded yet."
+3. Add income of **100000** to an event, then expenses of **20000**, **15000** and **10000**. The event shows Income ₹1,00,000, Expenses ₹45,000 and Balance ₹55,000.
+4. Delete the 10000 expense on **Manage expenses**. The dashboard shows ₹35,000 and ₹65,000.
+5. With two events (A: 100000 / 30000, B: 50000 / 10000), **All events** shows ₹1,50,000 / ₹40,000 / ₹1,10,000. Picking A shows ₹70,000, and B shows ₹40,000.
+6. Log in as a team member. **Manage → Dashboard** and **Manage → Finance** (view only) work, but there are no Add, Edit or Delete buttons, and `/admin/expenses` redirects to "unauthorized".
 7. Check the backend, not just the buttons:
 
    ```bash
@@ -758,6 +759,229 @@ The backend calls them with `supabaseAdmin.rpc(...)`. Execute permission is remo
      -H "Authorization: Bearer <admin-token>" -H "Content-Type: application/json" \
      -d '{"title":"x","category":"Food","amount":"-5","spent_date":"2026-10-01"}'      # 400
    ```
+
+## User Interface
+
+Phase 8 gave every page the same look, made the whole site work on phones, and added loading, error and empty states everywhere.
+
+### Design system
+
+All colours, buttons, cards and form fields come from one place, so a page never invents its own style.
+
+- **Colours** are defined once in `frontend/src/index.css` (Tailwind `@theme`) and used by name:
+
+  | Name | Use | Value |
+  | --- | --- | --- |
+  | `primary` | Buttons, links, active menu item | `#c2410c` (saffron) |
+  | `secondary` | The call-to-action band on the home page | `#881337` (maroon) |
+  | `page` / `surface` | Page background / cards, forms and tables | `#faf8f5` / `#ffffff` |
+  | `ink` / `muted` | Main text / secondary text | `#1f2937` / `#4b5563` |
+  | `success` / `warning` / `danger` | Income, saved messages / warnings / expenses, errors, Delete | `#15803d` / `#b45309` / `#b91c1c` |
+
+  Every text colour has a contrast of at least 4.5:1 on its background (the old orange-600 buttons were only 3.6:1).
+- **Shared components** in `frontend/src/components/ui/`:
+
+  | Component | What it is |
+  | --- | --- |
+  | `Button`, `ButtonLink` | Primary, secondary, danger and ghost buttons. At least 40 px tall, with a spinner while saving |
+  | `Card` | The white box around forms and details |
+  | `PageHeader`, `BackLink`, `SectionTitle` | The same page title, back link and section heading on every page |
+  | `InputField`, `PasswordField`, `SelectField`, `TextareaField`, `ReadOnlyField`, `FormActions` | Labelled form fields; the field to fix is outlined in red and gets the cursor. Passwords have **Show / Hide** |
+  | `Alert` | Success, error, warning and note messages, with an icon and a hidden word, so colour is never the only signal |
+  | `Badge` | Small labels: role, Upcoming / Past event, Cover |
+  | `ConfirmDialog` | The "Delete ...?" box. Esc or Cancel closes it, and Cancel has the focus first |
+  | `ResponsiveTable` | A table on tablets and computers, one card per row on phones |
+  | `LoadingState`, `EmptyState`, `ErrorState` | "Loading...", "No events yet." and "Something went wrong. [Try again]" |
+- **Site text** (name, tagline, About paragraphs, contact details) lives in `frontend/src/config/siteInfo.ts`. A contact detail left empty is simply not shown.
+
+### Navigation
+
+- **Everyone:** Home, Events, Gallery, About, Contact, and Login / Register (or the user's name and Logout).
+- **Admins** also get a **Manage** menu: Dashboard, Events, Albums, Media, Income, Expenses, Profile.
+- **Team members:** Dashboard, Events, Albums, Media, Finance, Profile.
+- **Media** opens the gallery, because photos and videos are uploaded and managed inside each album.
+- Below 1024 px wide, the menu folds into a **Menu** button. It closes on Esc, on a tap outside it, and after choosing a page.
+- Hiding menu items is not security: the backend still checks the role on every request.
+
+### Responsive design
+
+The pages are built for phones first and tested at 320, 375, 425, 768, 1024, 1280, 1440 and 1920 px wide, with no sideways scrolling at any width.
+
+- **Event and album cards:** 1 column on phones, 2 on tablets, 3 on computers. **Photo grid:** 2, 3, 4 or 5 columns.
+- **Admin tables** (events, albums, income, expenses) become stacked cards on phones, so the Edit and Delete buttons are always reachable.
+- **Forms** stack their buttons full-width on phones.
+- **Media viewer:** on phones, Previous and Next sit in the bottom bar instead of on top of the photo.
+- **Tap targets** (buttons, menu links, back links, Edit/Delete) are at least 40 px tall.
+
+### Public pages
+
+| Page | What it shows |
+| --- | --- |
+| Home `/` | Welcome banner, the next 3 upcoming events, 3 recent albums, 8 gallery photos, About us, and links to the gallery and registration. A section with nothing to show is left out, and nothing is made up |
+| Events `/events` | Event cards with date, place, Upcoming / Past badge and **View Event** |
+| Event `/events/:id` | Event details and its albums (team members and admins also see its finances) |
+| Gallery, Album | See the Gallery section above. On the album page, team members and admins open the upload panel with **+ Upload**, so visitors see the photos first |
+| About `/about`, Contact `/contact` | Text from `siteInfo.ts`. Contact says "Contact details will be published here soon." until details are filled in |
+| 404 | "Page not found." with **Go Home** |
+
+Financial information never appears on public pages.
+
+### Dashboard pages
+
+Dashboards, income, expense and album management pages use the same page header, buttons, tables and forms as the rest of the site. After saving or deleting, a message confirms it, e.g. "Event created successfully.", "Album updated successfully.", "Media uploaded successfully." or "Expense deleted successfully.". Every delete asks for confirmation first.
+
+These pages are downloaded only when a team member or admin opens them, so public visitors download less.
+
+### Accessibility
+
+- Semantic HTML: one `h1` per page, `nav`, `main`, `footer`, tables with captions, lists for cards.
+- Every field has a label; every image has alt text (decorative ones have `alt=""`).
+- Everything works with the keyboard. There is a **Skip to main content** link, a clear orange focus outline, and Esc closes the menu, dialogs and the media viewer.
+- Messages are read out by screen readers (`role="status"` and `role="alert"`), and charts also give their numbers as text.
+- Each page has its own browser tab title, e.g. "Durgamatha | Events".
+- If a page crashes, an error screen with **Reload page** and **Go Home** replaces it instead of a blank screen.
+
+### Browser support
+
+The site uses standard HTML, CSS and JavaScript supported by current versions of Chrome, Edge, Firefox and Safari, on desktop and mobile. It was tested in Chromium (the engine of Chrome and Edge). Firefox and Safari were not available in the test environment, so check them by hand before launch.
+
+## Deployment
+
+The website runs on three hosted services. All of them deploy straight from GitHub, and no Docker or extra servers are used.
+
+### Architecture
+
+```
+            Browser
+               │
+     ┌─────────┴─────────┐
+     ▼                   ▼
+  Vercel              Render
+  frontend  ──API──►  backend (Express)
+  (React)                │
+     │                   ├──► Supabase  (PostgreSQL + Auth)
+     └──── login ───────►│
+                         └──► Cloudinary (photos and videos)
+```
+
+- **Vercel** serves the built React app (`frontend/dist`).
+- **Render** runs the Express API (`node dist/server.js`).
+- **Supabase** stores the data and handles login. The browser uses only the public key; the secret key lives only on Render.
+- **Cloudinary** stores photos and videos. Uploads pass through the backend, and the temporary file is deleted right after, so nothing is kept on Render.
+- **GitHub `main`** is the production branch. Vercel and Render redeploy automatically when `main` changes.
+
+The code is in the `durgamatha-event/` folder of the repository, so both services need that folder in their **Root Directory**.
+
+### Supabase setup (production)
+
+Use the **existing** Supabase project; no new database is needed.
+
+1. In the **SQL Editor**, run any section of `supabase/schema.sql` that has not been run yet (for example the Phase 5, 6 and 7 sections). Running only the missing sections keeps all existing data.
+2. In **Table Editor**, check that `profiles`, `events`, `albums`, `media`, `income` and `expenses` exist.
+3. After the Vercel site exists, open **Authentication → URL Configuration**:
+   - **Site URL:** your Vercel address, e.g. `https://your-site.vercel.app`
+   - **Redirect URLs:** add the same address followed by `/**` (and keep `http://localhost:5173/**` for local development).
+
+### Cloudinary setup (production)
+
+Use the existing Cloudinary account. Only the backend needs its three values (`CLOUDINARY_CLOUD_NAME`, `CLOUDINARY_API_KEY`, `CLOUDINARY_API_SECRET`). Files are stored under `durgamatha/events/{eventId}/albums/{albumId}/`.
+
+### Render (backend)
+
+1. Sign in to [Render](https://render.com), choose **New → Web Service**, and connect the GitHub repository.
+2. Settings:
+
+   | Setting | Value |
+   | --- | --- |
+   | Branch | `main` |
+   | Root Directory | `durgamatha-event/backend` |
+   | Runtime | Node |
+   | Build Command | `npm install --include=dev && npm run build` |
+   | Start Command | `npm start` |
+   | Health Check Path | `/api/health` |
+
+   `--include=dev` is needed because TypeScript is a development tool: with `NODE_ENV=production`, a plain `npm install` would skip it and the build would fail.
+3. **Environment** variables (typed into Render, never into GitHub):
+
+   | Variable | Value |
+   | --- | --- |
+   | `NODE_ENV` | `production` |
+   | `FRONTEND_URL` | your Vercel address, e.g. `https://your-site.vercel.app` (no `/` at the end) |
+   | `SUPABASE_URL` | your Supabase Project URL |
+   | `SUPABASE_SERVICE_ROLE_KEY` | your Supabase **secret** key |
+   | `CLOUDINARY_CLOUD_NAME`, `CLOUDINARY_API_KEY`, `CLOUDINARY_API_SECRET` | from your Cloudinary dashboard |
+
+   Do **not** set `PORT`: Render chooses it and the server reads it from `process.env.PORT`.
+4. After the deploy, open `https://<your-service>.onrender.com/api/health`. It should return `{"success":true,"message":"Durgamatha API is running"}`.
+
+On Render's free plan, the server sleeps after 15 minutes without visitors and takes up to about a minute to wake up. The website waits up to 60 seconds for an answer, so the first visit after a quiet period is just slower.
+
+### Vercel (frontend)
+
+1. Sign in to [Vercel](https://vercel.com), choose **Add New → Project**, and import the GitHub repository.
+2. Settings:
+
+   | Setting | Value |
+   | --- | --- |
+   | Root Directory | `durgamatha-event/frontend` |
+   | Framework Preset | Vite |
+   | Build Command | `npm run build` |
+   | Output Directory | `dist` |
+
+3. **Environment Variables:**
+
+   | Variable | Value |
+   | --- | --- |
+   | `VITE_API_URL` | your Render address, e.g. `https://your-api.onrender.com` (no `/api`, no `/` at the end) |
+   | `VITE_SUPABASE_URL` | your Supabase Project URL |
+   | `VITE_SUPABASE_ANON_KEY` | your Supabase **publishable (anon)** key, never the secret key |
+
+   `VITE_` values are built into the website and visible to everyone, so only these three public values belong here.
+4. `frontend/vercel.json` sends every address (e.g. `/events/123`) to the React app, so refreshing any page works instead of showing Vercel's 404 page.
+
+### Connecting the two
+
+Vercel needs the Render address and Render needs the Vercel address, so:
+
+1. Deploy Render first (with a temporary `FRONTEND_URL`, e.g. `https://example.com`).
+2. Deploy Vercel with `VITE_API_URL` = the Render address.
+3. Set Render's `FRONTEND_URL` to the real Vercel address and redeploy Render.
+4. Set the Supabase Site URL and Redirect URLs (see above).
+
+A `VITE_` variable is read at build time, so after changing one in Vercel, **redeploy** the frontend.
+
+### Production testing
+
+On the live site, check:
+
+1. **Login and roles:** register, log in, log out, refresh while logged in, and log in as a team member and as an admin.
+2. **Public pages:** home, events, an event, an album, the gallery, the media viewer and a download.
+3. **Admin:** create, edit and delete an event and an album; upload and delete a photo and a video; set an album cover; add, edit and delete income and expenses.
+4. **Money:** with income ₹50,000 and expenses ₹10,000 + ₹5,000 + ₹2,500, the dashboard must show expenses ₹17,500 and balance ₹32,500.
+5. **Security:** `GET /api/dashboard/summary` returns 401 without login and 403 for a public user; the browser's developer tools (Network tab) never show a secret key.
+6. **Phones:** check the site on a phone or at narrow widths.
+
+### Troubleshooting
+
+| Problem | Likely cause and fix |
+| --- | --- |
+| Refreshing a page shows Vercel's 404 | `vercel.json` missing, or the Root Directory isn't `durgamatha-event/frontend` |
+| "Cannot reach the server" on every page | `VITE_API_URL` wrong or missing, or Vercel not redeployed after changing it. Open `<VITE_API_URL>/api/health` to check |
+| Browser console says "blocked by CORS policy" | Render's `FRONTEND_URL` doesn't exactly match the Vercel address (check `https://`, no `/` at the end), then redeploy Render |
+| Render build: `tsc: not found` | Build Command must be `npm install --include=dev && npm run build` |
+| Render deploy fails with "Missing environment variable ..." | Add that variable in Render's **Environment** tab |
+| First request is slow, then fine | The free Render server was asleep; it wakes up within about a minute |
+| Confirmation email opens localhost | Set the Supabase **Site URL** and **Redirect URLs** to the Vercel address |
+| Uploads fail with 502 | Cloudinary values on Render are wrong |
+| Login works but pages say "permission" errors | The user's role in the `profiles` table; change it in Supabase **Table Editor** |
+
+### Production URLs
+
+Not deployed yet. Add the addresses here once they exist:
+
+- Frontend: *(Vercel address)*
+- Backend: *(Render address)*
+- Health check: *(Render address)*`/api/health`
 
 ## Current development phase
 
@@ -806,4 +1030,13 @@ The backend calls them with `supabaseAdmin.rpc(...)`. Execute permission is remo
 - Finance REST API: team members and admins view, admins add, edit and delete; totals calculated inside PostgreSQL
 - Admin and team dashboards with summary cards, three Recharts charts, an event selector and recent activity; income and expense pages; a finance section on the event page
 
-Features such as UI polish and deployment will be added in later phases.
+**Phase 8: UI polish** (done)
+
+- Design system (theme colours and shared components), new navbar with a mobile menu, footer, About and Contact pages
+- Real home page; responsive pages, tables and forms from 320 px to 1920 px
+- Loading, error, empty and success states; delete confirmations; accessibility and page titles; 404 page and error screen
+
+**Phase 9: Deployment** (prepared)
+
+- Vercel page-refresh rewrite (`vercel.json`), safer production defaults for `NODE_ENV`, `FRONTEND_URL` and `VITE_API_URL`, Node version in `package.json`, `.gitignore` for every `.env` file
+- Deployment guide for Render, Vercel, Supabase and Cloudinary (above); the actual deployment is done in those dashboards
