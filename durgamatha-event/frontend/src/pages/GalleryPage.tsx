@@ -1,11 +1,16 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Link, useSearchParams } from 'react-router'
-import AlbumCard from '../components/AlbumCard'
+import AlbumCard, { AlbumCardSkeleton } from '../components/AlbumCard'
 import MediaGrid from '../components/MediaGrid'
 import MediaViewer from '../components/MediaViewer'
 import Pagination from '../components/Pagination'
 import SkeletonGrid from '../components/SkeletonGrid'
 import TypeFilter from '../components/TypeFilter'
+import Button from '../components/ui/Button'
+import { inputClass } from '../components/ui/Field'
+import PageHeader from '../components/ui/PageHeader'
+import { EmptyState, ErrorState } from '../components/ui/StateMessages'
+import { usePageTitle } from '../hooks/usePageTitle'
 import { usePagedMedia } from '../hooks/usePagedMedia'
 import { getAlbums } from '../services/albumService'
 import { getEvents } from '../services/eventService'
@@ -22,6 +27,7 @@ import { emptyMessage, readPage, readType } from '../utils/galleryParams'
 function GalleryPage() {
   const [searchParams, setSearchParams] = useSearchParams()
   const tab = searchParams.get('tab') === 'albums' ? 'albums' : 'media'
+  usePageTitle(tab === 'albums' ? 'Albums' : 'Gallery')
 
   // The events list fills the Event dropdowns (loaded once)
   const [events, setEvents] = useState<Event[]>([])
@@ -51,16 +57,15 @@ function GalleryPage() {
   )
 
   const tabClass = (active: boolean) =>
-    `rounded-t px-4 py-2 font-medium focus:outline-none focus-visible:ring-4 focus-visible:ring-orange-300 ${
-      active ? 'border-b-2 border-orange-600 text-orange-700' : 'text-gray-600 hover:text-orange-600'
+    `-mb-px inline-flex min-h-11 items-center border-b-2 px-4 font-medium ${
+      active ? 'border-primary text-primary-hover' : 'border-transparent text-muted hover:text-primary'
     }`
 
   return (
     <section className="mx-auto max-w-6xl">
-      <h1 className="text-3xl font-bold">Gallery</h1>
-      <p className="mt-2 text-gray-600">Photos and videos from Durgamatha events.</p>
+      <PageHeader title="Gallery" subtitle="Photos and videos from Durgamatha events." />
 
-      <nav aria-label="Gallery views" className="mt-6 flex gap-2 border-b border-gray-200">
+      <nav aria-label="Gallery views" className="flex gap-2 border-b border-line">
         <Link to="/gallery" aria-current={tab === 'media' ? 'page' : undefined} className={tabClass(tab === 'media')}>
           Photos &amp; Videos
         </Link>
@@ -84,8 +89,8 @@ interface TabProps {
   updateParams: (changes: Record<string, string>) => void
 }
 
-const selectClass =
-  'w-full rounded border border-gray-300 bg-white px-3 py-2 focus:border-orange-500 focus:outline-none focus-visible:ring-2 focus-visible:ring-orange-300'
+const selectClass = inputClass
+const labelClass = 'mb-1.5 block text-sm font-medium text-ink'
 
 // ---------------------------------------------------------------------------------------
 // Photos & Videos tab
@@ -129,7 +134,7 @@ function MediaTab({ events, eventsLoaded, searchParams, updateParams }: TabProps
       {/* Filters: stacked on phones, side by side on bigger screens */}
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-[1fr_1fr_auto] lg:items-end">
         <div>
-          <label htmlFor="gallery-event" className="mb-1 block text-sm font-medium text-gray-700">
+          <label htmlFor="gallery-event" className={labelClass}>
             Event
           </label>
           <select
@@ -147,7 +152,7 @@ function MediaTab({ events, eventsLoaded, searchParams, updateParams }: TabProps
           </select>
         </div>
         <div>
-          <label htmlFor="gallery-album" className="mb-1 block text-sm font-medium text-gray-700">
+          <label htmlFor="gallery-album" className={labelClass}>
             Album
           </label>
           <select id="gallery-album" value={albumId} onChange={(e) => updateParams({ album: e.target.value })} className={selectClass}>
@@ -160,34 +165,27 @@ function MediaTab({ events, eventsLoaded, searchParams, updateParams }: TabProps
           </select>
         </div>
         <div>
-          <span className="mb-1 block text-sm font-medium text-gray-700">Type</span>
+          <span className={labelClass}>Type</span>
           <TypeFilter value={type} onChange={(value) => updateParams({ type: value })} />
         </div>
       </div>
 
-      <div className="mt-3 flex flex-wrap items-center justify-between gap-2 text-sm text-gray-600">
+      <div className="mt-3 flex min-h-10 flex-wrap items-center justify-between gap-2 text-sm text-muted">
         <p aria-live="polite">{pagination ? `${pagination.total} ${pagination.total === 1 ? 'item' : 'items'}` : ''}</p>
         {hasFilters && (
-          <button type="button" onClick={() => updateParams({ event: '', album: '', type: '' })} className="font-semibold text-orange-600 hover:underline">
+          <Button variant="ghost" size="sm" onClick={() => updateParams({ event: '', album: '', type: '' })}>
             Clear filters
-          </button>
+          </Button>
         )}
       </div>
 
-      {gallery.error && (
-        <div role="alert" className="mt-3 rounded bg-red-50 px-3 py-2 text-red-700">
-          {gallery.error}{' '}
-          <button type="button" onClick={gallery.reload} className="font-semibold underline">
-            Try again
-          </button>
-        </div>
-      )}
+      {gallery.error && <ErrorState message={gallery.error} onRetry={gallery.reload} className="mt-3" />}
 
       <div className="mt-4">
         {gallery.loading && media.length === 0 && !gallery.error && <SkeletonGrid />}
 
         {!gallery.loading && !gallery.error && pagination?.total === 0 && (
-          <div className="rounded-lg border-2 border-dashed border-gray-300 p-8 text-center text-gray-500">{emptyText}</div>
+          <EmptyState message={emptyText} />
         )}
 
         {media.length > 0 && (
@@ -223,6 +221,7 @@ function AlbumsTab({ events, searchParams, updateParams }: TabProps) {
 
   const [albums, setAlbums] = useState<AlbumWithDetails[]>([])
   const [error, setError] = useState('')
+  const [attempt, setAttempt] = useState(0) // "Try again" repeats the request
   // The filters of the last answer. While they differ from the current ones, we are loading.
   const filterKey = `${search}|${eventId}`
   const [finishedKey, setFinishedKey] = useState<string | null>(null)
@@ -253,13 +252,13 @@ function AlbumsTab({ events, searchParams, updateParams }: TabProps) {
     return () => {
       ignore = true
     }
-  }, [search, eventId])
+  }, [search, eventId, attempt])
 
   return (
     <div className="mt-6">
       <div className="grid gap-3 sm:grid-cols-2">
         <div>
-          <label htmlFor="album-search" className="mb-1 block text-sm font-medium text-gray-700">
+          <label htmlFor="album-search" className={labelClass}>
             Search albums
           </label>
           <input
@@ -273,7 +272,7 @@ function AlbumsTab({ events, searchParams, updateParams }: TabProps) {
           />
         </div>
         <div>
-          <label htmlFor="albums-event" className="mb-1 block text-sm font-medium text-gray-700">
+          <label htmlFor="albums-event" className={labelClass}>
             Event
           </label>
           <select id="albums-event" value={eventId} onChange={(e) => updateParams({ event: e.target.value })} className={selectClass}>
@@ -287,20 +286,14 @@ function AlbumsTab({ events, searchParams, updateParams }: TabProps) {
         </div>
       </div>
 
-      {error && (
-        <p role="alert" className="mt-4 rounded bg-red-50 px-3 py-2 text-red-700">
-          {error}
-        </p>
-      )}
+      {error && <ErrorState message={error} onRetry={() => setAttempt((n) => n + 1)} className="mt-4" />}
       {loading && albums.length === 0 && !error && (
-        <p role="status" className="mt-4 text-gray-500">
-          Loading albums...
-        </p>
+        <div className="mt-4">
+          <AlbumCardSkeleton />
+        </div>
       )}
       {!loading && !error && albums.length === 0 && (
-        <div className="mt-4 rounded-lg border-2 border-dashed border-gray-300 p-8 text-center text-gray-500">
-          {search ? `No albums match "${search}".` : 'No albums available.'}
-        </div>
+        <EmptyState className="mt-4" message={search ? `No albums match "${search}".` : 'No albums available.'} />
       )}
 
       {albums.length > 0 && (

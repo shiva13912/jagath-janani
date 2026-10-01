@@ -22,11 +22,11 @@ function MediaCard({ media, caption, isCover = false, onOpen }: MediaCardProps) 
       onClick={onOpen}
       aria-label={label}
       data-media-id={media.id} // lets the viewer give focus back to this card
-      className="group block w-full overflow-hidden rounded-lg bg-white text-left shadow focus:outline-none focus-visible:ring-4 focus-visible:ring-orange-400"
+      className="group block w-full overflow-hidden rounded-lg border border-line bg-surface text-left shadow-sm focus:outline-none focus-visible:ring-4 focus-visible:ring-orange-400"
     >
       <div className="relative aspect-square bg-gray-100">
         {failed ? (
-          <div className="flex h-full items-center justify-center p-2 text-center text-sm text-gray-500">
+          <div className="flex h-full items-center justify-center p-2 text-center text-sm text-muted">
             {isVideo ? 'Preview unavailable' : 'Image unavailable'}
           </div>
         ) : (
@@ -59,10 +59,10 @@ function MediaCard({ media, caption, isCover = false, onOpen }: MediaCardProps) 
         )}
 
         {isCover && (
-          <span className="absolute top-2 left-2 rounded bg-orange-600 px-1.5 py-0.5 text-xs font-semibold text-white">Cover</span>
+          <span className="absolute top-2 left-2 rounded bg-primary px-1.5 py-0.5 text-xs font-semibold text-white">Cover</span>
         )}
       </div>
-      <p className="truncate px-2 py-1.5 text-xs text-gray-600" title={caption}>
+      <p className="truncate px-2 py-1.5 text-xs text-muted" title={caption}>
         {caption}
       </p>
     </button>

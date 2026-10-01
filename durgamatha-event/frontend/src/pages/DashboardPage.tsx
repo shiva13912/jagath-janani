@@ -1,12 +1,17 @@
 import { useCallback } from 'react'
-import { Link, useSearchParams } from 'react-router'
+import { useSearchParams } from 'react-router'
 import FinancialSummary from '../components/FinancialSummary'
 import RecentActivity from '../components/RecentActivity'
 import { StatCardSkeleton } from '../components/StatCard'
 import BalanceChart, { type BalanceBar } from '../components/charts/BalanceChart'
 import CategoryPieChart from '../components/charts/CategoryPieChart'
 import IncomeExpenseChart from '../components/charts/IncomeExpenseChart'
+import { ButtonLink } from '../components/ui/Button'
+import { SelectField } from '../components/ui/Field'
+import PageHeader from '../components/ui/PageHeader'
+import { EmptyState, ErrorState } from '../components/ui/StateMessages'
 import { useApiData } from '../hooks/useApiData'
+import { usePageTitle } from '../hooks/usePageTitle'
 import { getEvents } from '../services/eventService'
 import { getDashboardSummary, getEventDashboardSummary } from '../services/financeService'
 import type { DashboardStats, EventDashboardSummary } from '../types/finance'
@@ -23,6 +28,7 @@ function DashboardPage({ area }: DashboardPageProps) {
   const [searchParams, setSearchParams] = useSearchParams()
   const eventId = searchParams.get('event') ?? ''
   const isAdmin = area === 'admin'
+  usePageTitle(isAdmin ? 'Admin Dashboard' : 'Team Dashboard')
 
   const events = useApiData(getEvents)
 
@@ -44,65 +50,51 @@ function DashboardPage({ area }: DashboardPageProps) {
   const noEvents = events.data !== null && events.data.length === 0
 
   return (
-    <section className="mx-auto max-w-6xl">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-        <div>
-          <h1 className="text-2xl font-bold md:text-3xl">{isAdmin ? 'Admin Dashboard' : 'Team Dashboard'}</h1>
-          <p className="mt-1 text-gray-600">
-            {isAdmin ? 'Events, media and finances at a glance.' : 'Events, media and finances at a glance (view only).'}
-          </p>
-        </div>
-        <div className="sm:w-72">
-          <label htmlFor="dashboard-event" className="mb-1 block text-sm font-medium text-gray-700">
-            Event
-          </label>
-          <select
-            id="dashboard-event"
-            value={eventId}
-            onChange={(e) => chooseEvent(e.target.value)}
-            className="w-full rounded border border-gray-300 bg-white px-3 py-2 focus:border-orange-500 focus:outline-none focus-visible:ring-2 focus-visible:ring-orange-300"
-          >
-            <option value="">All events</option>
-            {events.data?.map((event) => (
-              <option key={event.id} value={event.id}>
-                {event.title}
-              </option>
-            ))}
-          </select>
-        </div>
+    <section>
+      <PageHeader
+        title={isAdmin ? 'Admin Dashboard' : 'Team Dashboard'}
+        subtitle={isAdmin ? 'Events, media and finances at a glance.' : 'Events, media and finances at a glance (view only).'}
+        actions={
+          <div className="w-full sm:w-72">
+            <SelectField id="dashboard-event" label="Event" value={eventId} onChange={(e) => chooseEvent(e.target.value)}>
+              <option value="">All events</option>
+              {events.data?.map((event) => (
+                <option key={event.id} value={event.id}>
+                  {event.title}
+                </option>
+              ))}
+            </SelectField>
+          </div>
+        }
+      />
+
+      <div className="flex flex-wrap gap-2">
+        {isAdmin ? (
+          <>
+            <ButtonLink to={`/admin/income/create${query}`}>+ Add income</ButtonLink>
+            <ButtonLink to={`/admin/expenses/create${query}`}>+ Add expense</ButtonLink>
+            <ButtonLink to={listPath.income} variant="secondary">
+              Manage income
+            </ButtonLink>
+            <ButtonLink to={listPath.expenses} variant="secondary">
+              Manage expenses
+            </ButtonLink>
+          </>
+        ) : (
+          <ButtonLink to="/team/finance" variant="secondary">
+            View all income and expenses
+          </ButtonLink>
+        )}
       </div>
 
-      {isAdmin && (
-        <div className="mt-4 flex flex-wrap gap-2">
-          <Link to={`/admin/income/create${query}`} className="rounded bg-green-700 px-4 py-2 font-semibold text-white hover:bg-green-800">
-            + Add income
-          </Link>
-          <Link to={`/admin/expenses/create${query}`} className="rounded bg-red-600 px-4 py-2 font-semibold text-white hover:bg-red-700">
-            + Add expense
-          </Link>
-          <Link to={listPath.income} className="rounded border border-gray-300 bg-white px-4 py-2 font-medium text-gray-700 hover:bg-gray-50">
-            Manage income
-          </Link>
-          <Link to={listPath.expenses} className="rounded border border-gray-300 bg-white px-4 py-2 font-medium text-gray-700 hover:bg-gray-50">
-            Manage expenses
-          </Link>
-        </div>
-      )}
-      {!isAdmin && (
-        <Link to="/team/finance" className="mt-4 inline-block rounded border border-gray-300 bg-white px-4 py-2 font-medium text-gray-700 hover:bg-gray-50">
-          View all income and expenses
-        </Link>
-      )}
-
-      {noEvents && <p className="mt-6 rounded-lg border-2 border-dashed border-gray-300 p-6 text-center text-gray-500">No events available.</p>}
+      {noEvents && <EmptyState message="No events available." className="mt-6" />}
 
       {summary.error && (
-        <div role="alert" className="mt-6 rounded bg-red-50 px-3 py-2 text-red-700">
-          {summary.error === 'The requested item was not found.' ? 'This event was not found. Please choose another event.' : summary.error}{' '}
-          <button type="button" onClick={summary.reload} className="font-semibold underline">
-            Try again
-          </button>
-        </div>
+        <ErrorState
+          className="mt-6"
+          message={summary.error === 'The requested item was not found.' ? 'This event was not found. Please choose another event.' : summary.error}
+          onRetry={summary.reload}
+        />
       )}
 
       <div className="mt-6" aria-busy={summary.loading}>
@@ -113,8 +105,8 @@ function DashboardPage({ area }: DashboardPageProps) {
             </p>
             <StatCardSkeleton count={8} />
             <div className="mt-6 grid gap-4 lg:grid-cols-2">
-              <div className="h-80 animate-pulse rounded-lg bg-gray-200" />
-              <div className="h-80 animate-pulse rounded-lg bg-gray-200" />
+              <div className="h-80 animate-pulse rounded-xl bg-gray-200" />
+              <div className="h-80 animate-pulse rounded-xl bg-gray-200" />
             </div>
           </>
         )}
@@ -161,9 +153,7 @@ function DashboardContent({ summary }: { summary: DashboardStats | EventDashboar
       />
 
       {single && !hasMoney && (
-        <p className="mt-6 rounded-lg border-2 border-dashed border-gray-300 p-6 text-center text-gray-500">
-          No financial data available for this event.
-        </p>
+        <EmptyState message="No financial data available for this event." className="mt-6" />
       )}
 
       {(!single || hasMoney) && (
@@ -176,7 +166,7 @@ function DashboardContent({ summary }: { summary: DashboardStats | EventDashboar
         </div>
       )}
       {!single && summary.events.length === 10 && (
-        <p className="mt-2 text-sm text-gray-500">The charts show the 10 most recent events with financial records. Choose an event above to see any other event.</p>
+        <p className="mt-2 text-sm text-muted">The charts show the 10 most recent events with financial records. Choose an event above to see any other event.</p>
       )}
     </>
   )

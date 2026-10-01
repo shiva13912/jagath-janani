@@ -1,7 +1,8 @@
 import { useState, type FormEvent } from 'react'
-import { Link } from 'react-router'
 import type { EventInput } from '../types/event'
-import FormField from './FormField'
+import Alert from './ui/Alert'
+import Button, { ButtonLink } from './ui/Button'
+import { FormActions, InputField, TextareaField } from './ui/Field'
 
 interface EventFormProps {
   initialValues?: EventInput
@@ -17,6 +18,7 @@ const emptyEvent: EventInput = { title: '', description: '', event_date: '', loc
 function EventForm({ initialValues = emptyEvent, submitLabel, submittingLabel, onSubmit }: EventFormProps) {
   const [values, setValues] = useState<EventInput>(initialValues)
   const [error, setError] = useState('')
+  const [badField, setBadField] = useState<keyof EventInput | null>(null)
   const [submitting, setSubmitting] = useState(false)
 
   // Updates one field, e.g. setField('title', 'New title')
@@ -24,20 +26,27 @@ function EventForm({ initialValues = emptyEvent, submitLabel, submittingLabel, o
     setValues({ ...values, [field]: value })
   }
 
-  function validate(): string {
-    if (!values.title.trim()) return 'Please enter a title.'
-    if (!values.description.trim()) return 'Please enter a description.'
-    if (!values.event_date) return 'Please choose a date.'
-    if (!values.location.trim()) return 'Please enter a location.'
-    return ''
+  // The first field with a problem and its message, or null
+  function validate(): { field: keyof EventInput; message: string } | null {
+    if (!values.title.trim()) return { field: 'title', message: 'Please enter a title.' }
+    if (!values.description.trim()) return { field: 'description', message: 'Please enter a description.' }
+    if (!values.event_date) return { field: 'event_date', message: 'Please choose a date.' }
+    if (!values.location.trim()) return { field: 'location', message: 'Please enter a location.' }
+    return null
   }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     setError('')
+    setBadField(null)
 
-    const validationError = validate()
-    if (validationError) return setError(validationError)
+    const problem = validate()
+    if (problem) {
+      setError(problem.message)
+      setBadField(problem.field)
+      document.getElementById(problem.field)?.focus()
+      return
+    }
 
     setSubmitting(true)
     try {
@@ -50,58 +59,53 @@ function EventForm({ initialValues = emptyEvent, submitLabel, submittingLabel, o
   }
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-4" noValidate>
-      <FormField
+    <form onSubmit={handleSubmit} className="space-y-5" noValidate>
+      <InputField
         id="title"
         label="Title"
         maxLength={150}
         value={values.title}
+        invalid={badField === 'title'}
         onChange={(e) => setField('title', e.target.value)}
       />
-
-      <div>
-        <label htmlFor="description" className="mb-1 block text-sm font-medium text-gray-700">
-          Description
-        </label>
-        <textarea
-          id="description"
-          rows={5}
-          maxLength={5000}
-          className="w-full rounded border border-gray-300 px-3 py-2 focus:border-orange-500 focus:outline-none"
-          value={values.description}
-          onChange={(e) => setField('description', e.target.value)}
+      <TextareaField
+        id="description"
+        label="Description"
+        rows={5}
+        maxLength={5000}
+        value={values.description}
+        invalid={badField === 'description'}
+        onChange={(e) => setField('description', e.target.value)}
+      />
+      <div className="grid gap-5 sm:grid-cols-2">
+        <InputField
+          id="event_date"
+          label="Date"
+          type="date"
+          value={values.event_date}
+          invalid={badField === 'event_date'}
+          onChange={(e) => setField('event_date', e.target.value)}
+        />
+        <InputField
+          id="location"
+          label="Location"
+          maxLength={200}
+          value={values.location}
+          invalid={badField === 'location'}
+          onChange={(e) => setField('location', e.target.value)}
         />
       </div>
 
-      <FormField
-        id="event_date"
-        label="Date"
-        type="date"
-        value={values.event_date}
-        onChange={(e) => setField('event_date', e.target.value)}
-      />
-      <FormField
-        id="location"
-        label="Location"
-        maxLength={200}
-        value={values.location}
-        onChange={(e) => setField('location', e.target.value)}
-      />
+      {error && <Alert tone="error">{error}</Alert>}
 
-      {error && <p className="rounded bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
-
-      <div className="flex flex-col gap-2 sm:flex-row">
-        <button
-          type="submit"
-          disabled={submitting}
-          className="rounded bg-orange-600 px-5 py-2 font-semibold text-white hover:bg-orange-700 disabled:opacity-60"
-        >
-          {submitting ? submittingLabel : submitLabel}
-        </button>
-        <Link to="/admin/events" className="rounded border border-gray-300 px-5 py-2 text-center text-gray-700 hover:bg-gray-50">
+      <FormActions>
+        <Button type="submit" loading={submitting} loadingText={submittingLabel}>
+          {submitLabel}
+        </Button>
+        <ButtonLink to="/admin/events" variant="secondary">
           Cancel
-        </Link>
-      </div>
+        </ButtonLink>
+      </FormActions>
     </form>
   )
 }

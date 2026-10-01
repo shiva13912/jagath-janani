@@ -29,6 +29,7 @@ export async function getGalleryMedia(options: {
   type: MediaTypeFilter
   eventId: string
   albumId: string
+  limit?: number // default 24
 }): Promise<MediaPage> {
   const response = await api.get<{ success: boolean } & MediaPage>('/media', {
     params: {

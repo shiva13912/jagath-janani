@@ -1,6 +1,7 @@
 import { useCallback, useState } from 'react'
-import { Link, useLocation, useSearchParams } from 'react-router'
+import { useSearchParams } from 'react-router'
 import { useApiData } from '../hooks/useApiData'
+import { useFlashMessage } from '../hooks/useFlashMessage'
 import { getEvents } from '../services/eventService'
 import { deleteExpense, deleteIncome, getExpensePage, getIncomePage } from '../services/financeService'
 import { EXPENSE_CATEGORIES, type FinanceKind } from '../types/finance'
@@ -9,6 +10,12 @@ import { getErrorMessage } from '../utils/apiError'
 import { formatEventDate } from '../utils/date'
 import { formatINR } from '../utils/money'
 import Pagination from './Pagination'
+import Alert from './ui/Alert'
+import Button, { ButtonLink } from './ui/Button'
+import ConfirmDialog from './ui/ConfirmDialog'
+import { InputField, SelectField } from './ui/Field'
+import ResponsiveTable, { SkeletonTable } from './ui/ResponsiveTable'
+import { EmptyState, ErrorState } from './ui/StateMessages'
 
 // One row of the table, the same shape for income and expenses
 interface Row {
@@ -22,19 +29,15 @@ interface Row {
 
 interface FinanceRecordsProps {
   kind: FinanceKind
-  canEdit: boolean // false for team members: no Add/Edit/Delete (and the backend refuses anyway)
-  basePath: string // e.g. "/admin/expenses", used for the Add and Edit links
+  canEdit: boolean // false for team members: no Edit/Delete (and the backend refuses anyway)
+  basePath: string // e.g. "/admin/expenses", used for the Edit links
 }
-
-const inputClass =
-  'w-full rounded border border-gray-300 bg-white px-3 py-2 focus:border-orange-500 focus:outline-none focus-visible:ring-2 focus-visible:ring-orange-300'
 
 // The income or expenses list with filters (event, category, dates), pages and actions.
 // Used by /admin/income, /admin/expenses and the read-only /team/finance.
 // Filters live in the URL, so a refresh, Back or a shared link keeps them.
 function FinanceRecords({ kind, canEdit, basePath }: FinanceRecordsProps) {
   const [searchParams, setSearchParams] = useSearchParams()
-  const location = useLocation()
   const isExpenses = kind === 'expenses'
   const noun = isExpenses ? 'expense' : 'income record'
   const plural = isExpenses ? 'expenses' : 'income records'
@@ -46,9 +49,8 @@ function FinanceRecords({ kind, canEdit, basePath }: FinanceRecordsProps) {
   const page = Math.max(1, Number.parseInt(searchParams.get('page') ?? '1', 10) || 1)
   const hasFilters = Boolean(eventId || category || from || to)
 
-  // A message passed by the create/edit form after saving, e.g. "Expense added."
-  const savedMessage = (location.state as { message?: string } | null)?.message ?? ''
-  const [message, setMessage] = useState('')
+  // After saving, the form passes a message such as "Expense added successfully."
+  const [message, setMessage] = useFlashMessage()
   const [actionError, setActionError] = useState('')
   const [rowToDelete, setRowToDelete] = useState<Row | null>(null)
   const [deleting, setDeleting] = useState(false)
@@ -85,7 +87,6 @@ function FinanceRecords({ kind, canEdit, basePath }: FinanceRecordsProps) {
         }
         return result
       },
-      { replace: false, state: null }, // clears the "saved" message from the form
     )
   }
 
@@ -96,14 +97,13 @@ function FinanceRecords({ kind, canEdit, basePath }: FinanceRecordsProps) {
     try {
       if (isExpenses) await deleteExpense(rowToDelete.id)
       else await deleteIncome(rowToDelete.id)
-      setMessage(`"${rowToDelete.title}" was deleted.`)
-      setRowToDelete(null)
+      setMessage(`${isExpenses ? 'Expense' : 'Income'} deleted successfully. ("${rowToDelete.title}", ${formatINR(rowToDelete.amount)})`)
       list.reload() // load the list again from the database
     } catch (err) {
       setActionError(getErrorMessage(err))
-      setRowToDelete(null)
     } finally {
       setDeleting(false)
+      setRowToDelete(null)
     }
   }
 
@@ -116,190 +116,110 @@ function FinanceRecords({ kind, canEdit, basePath }: FinanceRecordsProps) {
       : isExpenses
         ? 'No expenses recorded yet.'
         : 'No income records yet.'
-  const shownMessage = message || savedMessage
+  const amountClass = `font-semibold whitespace-nowrap ${isExpenses ? 'text-danger' : 'text-success'}`
 
   return (
     <div>
-      {canEdit && (
-        <Link
-          to={`${basePath}/create${eventId ? `?event=${eventId}` : ''}`}
-          className={`inline-block rounded px-4 py-2 font-semibold text-white ${isExpenses ? 'bg-red-600 hover:bg-red-700' : 'bg-green-700 hover:bg-green-800'}`}
-        >
-          {isExpenses ? '+ Add expense' : '+ Add income'}
-        </Link>
-      )}
-
       {/* Filters: stacked on phones, in a row on bigger screens */}
-      <div className={`mt-4 grid gap-3 sm:grid-cols-2 ${isExpenses ? 'lg:grid-cols-4' : 'lg:grid-cols-3'}`}>
-        <div>
-          <label htmlFor={`${kind}-event`} className="mb-1 block text-sm font-medium text-gray-700">
-            Event
-          </label>
-          <select id={`${kind}-event`} value={eventId} onChange={(e) => updateParams({ event: e.target.value })} className={inputClass}>
-            <option value="">All events</option>
-            {events.data?.map((event) => (
-              <option key={event.id} value={event.id}>
-                {event.title}
+      <div className={`grid gap-3 sm:grid-cols-2 ${isExpenses ? 'lg:grid-cols-4' : 'lg:grid-cols-3'}`}>
+        <SelectField id={`${kind}-event`} label="Event" value={eventId} onChange={(e) => updateParams({ event: e.target.value })}>
+          <option value="">All events</option>
+          {events.data?.map((event) => (
+            <option key={event.id} value={event.id}>
+              {event.title}
+            </option>
+          ))}
+        </SelectField>
+        {isExpenses && (
+          <SelectField id="expenses-category" label="Category" value={category} onChange={(e) => updateParams({ category: e.target.value })}>
+            <option value="">All categories</option>
+            {EXPENSE_CATEGORIES.map((c) => (
+              <option key={c} value={c}>
+                {c}
               </option>
             ))}
-          </select>
-        </div>
-        {isExpenses && (
-          <div>
-            <label htmlFor="expenses-category" className="mb-1 block text-sm font-medium text-gray-700">
-              Category
-            </label>
-            <select id="expenses-category" value={category} onChange={(e) => updateParams({ category: e.target.value })} className={inputClass}>
-              <option value="">All categories</option>
-              {EXPENSE_CATEGORIES.map((c) => (
-                <option key={c} value={c}>
-                  {c}
-                </option>
-              ))}
-            </select>
-          </div>
+          </SelectField>
         )}
-        <div>
-          <label htmlFor={`${kind}-from`} className="mb-1 block text-sm font-medium text-gray-700">
-            From date
-          </label>
-          <input id={`${kind}-from`} type="date" value={from} max={to || undefined} onChange={(e) => updateParams({ from: e.target.value })} className={inputClass} />
-        </div>
-        <div>
-          <label htmlFor={`${kind}-to`} className="mb-1 block text-sm font-medium text-gray-700">
-            To date
-          </label>
-          <input id={`${kind}-to`} type="date" value={to} min={from || undefined} onChange={(e) => updateParams({ to: e.target.value })} className={inputClass} />
-        </div>
+        <InputField id={`${kind}-from`} label="From date" type="date" value={from} max={to || undefined} onChange={(e) => updateParams({ from: e.target.value })} />
+        <InputField id={`${kind}-to`} label="To date" type="date" value={to} min={from || undefined} onChange={(e) => updateParams({ to: e.target.value })} />
       </div>
 
-      <div className="mt-3 flex flex-wrap items-center justify-between gap-2 text-sm text-gray-600">
+      <div className="mt-3 flex min-h-10 flex-wrap items-center justify-between gap-2 text-sm text-muted">
         <p aria-live="polite">{pagination ? `${pagination.total} ${pagination.total === 1 ? noun : plural}` : ''}</p>
         {hasFilters && (
-          <button type="button" onClick={() => updateParams({ event: '', category: '', from: '', to: '' })} className="font-semibold text-orange-600 hover:underline">
+          <Button variant="ghost" size="sm" onClick={() => updateParams({ event: '', category: '', from: '', to: '' })}>
             Clear filters
-          </button>
+          </Button>
         )}
       </div>
 
-      {shownMessage && (
-        <p role="status" className="mt-3 rounded bg-green-50 px-3 py-2 text-green-700">
-          {shownMessage}
-        </p>
+      {message && (
+        <Alert tone="success" className="mt-3">
+          {message}
+        </Alert>
       )}
       {actionError && (
-        <p role="alert" className="mt-3 rounded bg-red-50 px-3 py-2 text-red-700">
+        <Alert tone="error" className="mt-3">
           {actionError}
-        </p>
-      )}
-      {list.error && (
-        <p role="alert" className="mt-3 rounded bg-red-50 px-3 py-2 text-red-700">
-          {list.error}{' '}
-          <button type="button" onClick={list.reload} className="font-semibold underline">
-            Try again
-          </button>
-        </p>
-      )}
-      {list.loading && (
-        <p role="status" className="mt-4 text-gray-500">
-          Loading {isExpenses ? 'expenses' : 'income'}...
-        </p>
-      )}
-      {pagination?.total === 0 && <div className="mt-4 rounded-lg border-2 border-dashed border-gray-300 p-8 text-center text-gray-500">{emptyText}</div>}
-      {pagination && pagination.total > 0 && rows.length === 0 && (
-        <p className="mt-4 text-gray-600">There is nothing on this page. Use the buttons below to go back.</p>
+        </Alert>
       )}
 
-      {rows.length > 0 && (
-        <>
-          {/* Phones: one card per record, so nothing needs sideways scrolling */}
-          <ul className="mt-4 space-y-3 md:hidden">
-            {rows.map((row) => (
-              <li key={row.id} className="rounded-lg bg-white p-4 shadow">
-                <div className="flex items-start justify-between gap-3">
-                  <p className="min-w-0 break-words font-medium">{row.title}</p>
-                  <p className={`whitespace-nowrap font-semibold ${isExpenses ? 'text-red-700' : 'text-green-700'}`}>{formatINR(row.amount)}</p>
-                </div>
-                <p className="mt-1 text-sm text-gray-600">
-                  {row.eventTitle} · {row.detail}
-                </p>
-                <p className="text-sm text-gray-500">{formatEventDate(row.date)}</p>
-                {canEdit && <RowActions row={row} basePath={basePath} onDelete={setRowToDelete} />}
-              </li>
-            ))}
-          </ul>
+      <div className="mt-4">
+        {list.loading && <SkeletonTable label={`Loading ${isExpenses ? 'expenses' : 'income'}...`} />}
+        {list.error && <ErrorState message={list.error} onRetry={list.reload} />}
+        {pagination?.total === 0 && <EmptyState message={emptyText} />}
+        {pagination && pagination.total > 0 && rows.length === 0 && (
+          <p className="text-muted">There is nothing on this page. Use the buttons below to go back.</p>
+        )}
 
-          {/* Tablets and computers: a table */}
-          <div className="mt-4 hidden overflow-x-auto rounded-lg bg-white shadow md:block">
-            <table className="w-full text-left text-sm">
-              <thead className="border-b border-gray-200 bg-gray-50 text-gray-600">
-                <tr>
-                  <th className="px-4 py-3">{isExpenses ? 'Expense' : 'Income'}</th>
-                  <th className="px-4 py-3">Event</th>
-                  <th className="px-4 py-3">{isExpenses ? 'Category' : 'Source'}</th>
-                  <th className="px-4 py-3 text-right">Amount</th>
-                  <th className="px-4 py-3">Date</th>
-                  {canEdit && <th className="px-4 py-3 text-right">Actions</th>}
-                </tr>
-              </thead>
-              <tbody>
-                {rows.map((row) => (
-                  <tr key={row.id} className="border-b border-gray-100 last:border-0">
-                    <td className="px-4 py-3 font-medium">{row.title}</td>
-                    <td className="px-4 py-3">{row.eventTitle}</td>
-                    <td className="px-4 py-3">{row.detail}</td>
-                    <td className="whitespace-nowrap px-4 py-3 text-right font-semibold">{formatINR(row.amount)}</td>
-                    <td className="whitespace-nowrap px-4 py-3">{formatEventDate(row.date)}</td>
-                    {canEdit && (
-                      <td className="whitespace-nowrap px-4 py-3 text-right">
-                        <RowActions row={row} basePath={basePath} onDelete={setRowToDelete} />
-                      </td>
-                    )}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </>
-      )}
+        {rows.length > 0 && (
+          <ResponsiveTable
+            caption={isExpenses ? 'Expenses' : 'Income'}
+            rows={rows}
+            rowKey={(row) => row.id}
+            columns={[
+              { header: isExpenses ? 'Expense' : 'Income', cell: (row) => row.title },
+              { header: 'Amount', cell: (row) => <span className={amountClass}>{formatINR(row.amount)}</span>, align: 'right' },
+              { header: 'Event', cell: (row) => row.eventTitle },
+              { header: isExpenses ? 'Category' : 'Source', cell: (row) => row.detail },
+              { header: 'Date', cell: (row) => <span className="whitespace-nowrap">{formatEventDate(row.date)}</span> },
+            ]}
+            actions={
+              canEdit
+                ? (row) => (
+                    <>
+                      <ButtonLink to={`${basePath}/${row.id}/edit`} variant="secondary" size="sm" aria-label={`Edit ${row.title}`}>
+                        Edit
+                      </ButtonLink>
+                      <Button variant="danger" size="sm" onClick={() => setRowToDelete(row)} aria-label={`Delete ${row.title}`}>
+                        Delete
+                      </Button>
+                    </>
+                  )
+                : undefined
+            }
+          />
+        )}
+      </div>
 
       {pagination && <Pagination page={pagination.page} totalPages={pagination.totalPages} onChange={(p) => updateParams({ page: String(p) })} />}
 
       {/* Confirmation box: nothing is deleted until the admin confirms */}
       {rowToDelete && (
-        <div className="fixed inset-0 z-10 flex items-center justify-center bg-black/40 px-4" role="dialog" aria-modal="true" aria-labelledby="delete-title">
-          <div className="w-full max-w-sm rounded-lg bg-white p-6 shadow-lg">
-            <h2 id="delete-title" className="text-lg font-semibold">
-              Delete {noun}?
-            </h2>
-            <p className="mt-2 text-gray-600">
-              Are you sure you want to delete "{rowToDelete.title}" ({formatINR(rowToDelete.amount)})? This cannot be undone.
-            </p>
-            <div className="mt-6 flex justify-end gap-2">
-              <button type="button" onClick={() => setRowToDelete(null)} disabled={deleting} className="rounded border border-gray-300 px-4 py-2 text-gray-700 hover:bg-gray-50">
-                Cancel
-              </button>
-              <button type="button" onClick={confirmDelete} disabled={deleting} className="rounded bg-red-600 px-4 py-2 font-semibold text-white hover:bg-red-700 disabled:opacity-60">
-                {deleting ? 'Deleting...' : 'Delete'}
-              </button>
-            </div>
-          </div>
-        </div>
+        <ConfirmDialog
+          title={`Delete ${noun}?`}
+          confirmLabel="Delete"
+          busyLabel="Deleting..."
+          busy={deleting}
+          onConfirm={confirmDelete}
+          onCancel={() => setRowToDelete(null)}
+        >
+          <p>
+            Are you sure you want to delete "{rowToDelete.title}" ({formatINR(rowToDelete.amount)})? This cannot be undone.
+          </p>
+        </ConfirmDialog>
       )}
     </div>
-  )
-}
-
-function RowActions({ row, basePath, onDelete }: { row: Row; basePath: string; onDelete: (row: Row) => void }) {
-  return (
-    <span className="mt-2 inline-flex gap-4 md:mt-0">
-      <Link to={`${basePath}/${row.id}/edit`} className="text-orange-600 hover:underline" aria-label={`Edit ${row.title}`}>
-        Edit
-      </Link>
-      <button type="button" onClick={() => onDelete(row)} className="text-red-600 hover:underline" aria-label={`Delete ${row.title}`}>
-        Delete
-      </button>
-    </span>
   )
 }
 

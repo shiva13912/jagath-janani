@@ -1,11 +1,15 @@
 import { useNavigate } from 'react-router'
 import EventForm from '../components/EventForm'
+import Card from '../components/ui/Card'
+import PageHeader from '../components/ui/PageHeader'
+import { usePageTitle } from '../hooks/usePageTitle'
 import { createEvent } from '../services/eventService'
 import type { EventInput } from '../types/event'
 import { getErrorMessage } from '../utils/apiError'
 
 // ADMIN only: form to create a new event
 function CreateEventPage() {
+  usePageTitle('Create Event')
   const navigate = useNavigate()
 
   async function handleCreate(data: EventInput) {
@@ -15,14 +19,16 @@ function CreateEventPage() {
       // Give the form a friendly message to display
       throw new Error(getErrorMessage(err))
     }
-    navigate('/admin/events')
+    navigate('/admin/events', { state: { success: 'Event created successfully.' } })
   }
 
   return (
-    <section className="mx-auto max-w-2xl rounded-lg bg-white p-6 shadow">
-      <h1 className="mb-6 text-2xl font-bold">Create Event</h1>
-      <EventForm submitLabel="Create Event" submittingLabel="Creating..." onSubmit={handleCreate} />
-    </section>
+    <div className="mx-auto max-w-2xl">
+      <PageHeader title="Create Event" back={{ to: '/admin/events', label: 'Back to events' }} />
+      <Card>
+        <EventForm submitLabel="Create Event" submittingLabel="Creating..." onSubmit={handleCreate} />
+      </Card>
+    </div>
   )
 }
 

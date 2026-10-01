@@ -1,9 +1,12 @@
-// "10000.5" -> "₹10,000.50" (Indian grouping: ₹1,00,000.00 for one lakh).
-// Negative balances show as "-₹2,250.00".
-const inr = new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', minimumFractionDigits: 2 })
+// "125000" -> "₹1,25,000" and "15500.5" -> "₹15,500.50" (Indian grouping: ₹1,00,000 for one lakh).
+// Paise are shown only when an amount has them. Negative balances show as "-₹2,250".
+// This only changes how a number LOOKS; stored values and calculations stay exact.
+const inrWhole = new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 })
+const inrPaise = new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', minimumFractionDigits: 2, maximumFractionDigits: 2 })
 
 export function formatINR(value: string | number): string {
-  return inr.format(Number(value))
+  const amount = Number(value)
+  return Number.isInteger(amount) ? inrWhole.format(amount) : inrPaise.format(amount)
 }
 
 // Short form for chart axes: ₹1.5L, ₹25K

@@ -1,5 +1,14 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useState } from 'react'
 import { Link } from 'react-router'
+import Alert from '../components/ui/Alert'
+import Button, { ButtonLink } from '../components/ui/Button'
+import ConfirmDialog from '../components/ui/ConfirmDialog'
+import PageHeader from '../components/ui/PageHeader'
+import ResponsiveTable, { SkeletonTable } from '../components/ui/ResponsiveTable'
+import { EmptyState, ErrorState } from '../components/ui/StateMessages'
+import { useApiData } from '../hooks/useApiData'
+import { useFlashMessage } from '../hooks/useFlashMessage'
+import { usePageTitle } from '../hooks/usePageTitle'
 import { deleteEvent, getEvents } from '../services/eventService'
 import type { Event } from '../types/event'
 import { getErrorMessage } from '../utils/apiError'
@@ -7,132 +16,99 @@ import { formatEventDate } from '../utils/date'
 
 // ADMIN only: list of all events with Edit and Delete actions
 function AdminEventsPage() {
-  const [events, setEvents] = useState<Event[]>([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState('')
-  const [success, setSuccess] = useState('')
+  usePageTitle('Manage Events')
+  const { data: events, error, loading, reload } = useApiData(useCallback(() => getEvents(), []))
+  const [success, setSuccess] = useFlashMessage() // e.g. "Event created successfully."
+  const [actionError, setActionError] = useState('')
   // The event the admin clicked "Delete" on (shows the confirmation box)
   const [eventToDelete, setEventToDelete] = useState<Event | null>(null)
   const [deleting, setDeleting] = useState(false)
-
-  // Loads (or reloads) the list from the backend
-  function loadEvents() {
-    return getEvents()
-      .then((list) => {
-        setEvents(list)
-        setError('')
-      })
-      .catch((err) => setError(getErrorMessage(err)))
-      .finally(() => setLoading(false))
-  }
-
-  useEffect(() => {
-    loadEvents()
-  }, [])
 
   async function confirmDelete() {
     if (!eventToDelete) return
     setDeleting(true)
     setSuccess('')
+    setActionError('')
     try {
       await deleteEvent(eventToDelete.id)
-      setEventToDelete(null)
-      await loadEvents() // refresh the list first, so the message never shows next to the deleted event
-      setSuccess(`"${eventToDelete.title}" was deleted.`)
+      setSuccess(`Event deleted successfully. ("${eventToDelete.title}")`)
+      reload()
     } catch (err) {
-      setError(getErrorMessage(err))
-      setEventToDelete(null)
+      setActionError(getErrorMessage(err))
     } finally {
       setDeleting(false)
+      setEventToDelete(null)
     }
   }
 
   return (
     <section>
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <h1 className="text-2xl font-bold">Manage Events</h1>
-        <Link
-          to="/admin/events/create"
-          className="rounded bg-orange-600 px-4 py-2 text-center font-semibold text-white hover:bg-orange-700"
-        >
-          Create Event
-        </Link>
-      </div>
+      <PageHeader title="Manage Events" subtitle="Create, edit and delete events." actions={<ButtonLink to="/admin/events/create">+ Create Event</ButtonLink>} />
 
-      {success && <p className="mt-4 rounded bg-green-50 px-3 py-2 text-green-700">{success}</p>}
-      {error && <p className="mt-4 rounded bg-red-50 px-3 py-2 text-red-700">{error}</p>}
-      {loading && <p className="mt-6 text-gray-500">Loading events...</p>}
-      {!loading && !error && events.length === 0 && (
-        <p className="mt-6 text-gray-600">No events yet. Click "Create Event" to add one.</p>
+      {success && (
+        <Alert tone="success" className="mb-4">
+          {success}
+        </Alert>
+      )}
+      {actionError && (
+        <Alert tone="error" className="mb-4">
+          {actionError}
+        </Alert>
       )}
 
-      {events.length > 0 && (
-        // overflow-x-auto lets the table scroll sideways on small phones
-        <div className="mt-6 overflow-x-auto rounded-lg bg-white shadow">
-          <table className="w-full text-left text-sm">
-            <thead className="border-b border-gray-200 bg-gray-50 text-gray-600">
-              <tr>
-                <th className="px-4 py-3">Event</th>
-                <th className="px-4 py-3">Date</th>
-                {/* Location is hidden on phones so the Actions column stays visible */}
-                <th className="hidden px-4 py-3 md:table-cell">Location</th>
-                <th className="px-4 py-3 text-right">Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {events.map((event) => (
-                <tr key={event.id} className="border-b border-gray-100 last:border-0">
-                  <td className="px-4 py-3 font-medium">
-                    <Link to={`/events/${event.id}`} className="hover:text-orange-600">
-                      {event.title}
-                    </Link>
-                  </td>
-                  <td className="whitespace-nowrap px-4 py-3">{formatEventDate(event.event_date)}</td>
-                  <td className="hidden px-4 py-3 md:table-cell">{event.location}</td>
-                  <td className="whitespace-nowrap px-4 py-3 text-right">
-                    <Link to={`/admin/events/${event.id}/edit`} className="mr-3 text-orange-600 hover:underline">
-                      Edit
-                    </Link>
-                    <button type="button" onClick={() => setEventToDelete(event)} className="text-red-600 hover:underline">
-                      Delete
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+      {loading && <SkeletonTable label="Loading events..." />}
+      {error && <ErrorState message={error} onRetry={reload} />}
+      {events && events.length === 0 && (
+        <EmptyState message="No events yet.">
+          <ButtonLink to="/admin/events/create">Create Event</ButtonLink>
+        </EmptyState>
+      )}
+
+      {events && events.length > 0 && (
+        <ResponsiveTable
+          caption="Events"
+          rows={events}
+          rowKey={(event) => event.id}
+          columns={[
+            {
+              header: 'Event',
+              cell: (event) => (
+                <Link to={`/events/${event.id}`} className="text-ink underline-offset-2 hover:text-primary hover:underline">
+                  {event.title}
+                </Link>
+              ),
+            },
+            { header: 'Date', cell: (event) => <span className="whitespace-nowrap">{formatEventDate(event.event_date)}</span> },
+            { header: 'Location', cell: (event) => event.location, hideBelow: 'lg' },
+          ]}
+          actions={(event) => (
+            <>
+              <ButtonLink to={`/admin/events/${event.id}/edit`} variant="secondary" size="sm" aria-label={`Edit ${event.title}`}>
+                Edit
+              </ButtonLink>
+              <Button variant="danger" size="sm" onClick={() => setEventToDelete(event)} aria-label={`Delete ${event.title}`}>
+                Delete
+              </Button>
+            </>
+          )}
+        />
       )}
 
       {/* Confirmation box: nothing is deleted until the admin clicks Delete here */}
       {eventToDelete && (
-        <div className="fixed inset-0 z-10 flex items-center justify-center bg-black/40 px-4" role="dialog" aria-modal="true">
-          <div className="w-full max-w-sm rounded-lg bg-white p-6 shadow-lg">
-            <h2 className="text-lg font-semibold">Delete event?</h2>
-            <p className="mt-2 text-gray-600">
-              Are you sure you want to delete "{eventToDelete.title}"? This cannot be undone.
-            </p>
-            <p className="mt-2 text-sm text-gray-500">All albums of this event and all their photos and videos will be deleted too, and so will all of its income and expense records.</p>
-            <div className="mt-6 flex justify-end gap-2">
-              <button
-                type="button"
-                onClick={() => setEventToDelete(null)}
-                disabled={deleting}
-                className="rounded border border-gray-300 px-4 py-2 text-gray-700 hover:bg-gray-50"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={confirmDelete}
-                disabled={deleting}
-                className="rounded bg-red-600 px-4 py-2 font-semibold text-white hover:bg-red-700 disabled:opacity-60"
-              >
-                {deleting ? 'Deleting...' : 'Delete'}
-              </button>
-            </div>
-          </div>
-        </div>
+        <ConfirmDialog
+          title="Delete event?"
+          confirmLabel="Delete"
+          busyLabel="Deleting..."
+          busy={deleting}
+          onConfirm={confirmDelete}
+          onCancel={() => setEventToDelete(null)}
+        >
+          <p>Are you sure you want to delete "{eventToDelete.title}"? This cannot be undone.</p>
+          <p className="text-sm">
+            All albums of this event and all their photos and videos will be deleted too, and so will all of its income and expense records.
+          </p>
+        </ConfirmDialog>
       )}
     </section>
   )

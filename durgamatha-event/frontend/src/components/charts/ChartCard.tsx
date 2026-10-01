@@ -12,10 +12,10 @@ interface ChartCardProps {
 // are also given as text for screen readers. With no data, a message replaces the chart.
 function ChartCard({ title, summary, empty, emptyText, children }: ChartCardProps) {
   return (
-    <figure className="min-w-0 rounded-lg bg-white p-4 shadow">
-      <figcaption className="font-semibold">{title}</figcaption>
+    <figure className="min-w-0 rounded-xl border border-line bg-surface p-4 shadow-sm sm:p-5">
+      <figcaption className="font-semibold text-ink">{title}</figcaption>
       {empty ? (
-        <p className="flex h-64 items-center justify-center text-center text-gray-500">{emptyText}</p>
+        <p className="flex h-64 items-center justify-center text-center text-muted">{emptyText}</p>
       ) : (
         <>
           <p className="sr-only">{summary}</p>

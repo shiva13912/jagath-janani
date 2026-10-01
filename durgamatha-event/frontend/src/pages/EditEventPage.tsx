@@ -1,12 +1,18 @@
 import { useEffect, useState } from 'react'
-import { Link, useNavigate, useParams } from 'react-router'
+import { useNavigate, useParams } from 'react-router'
 import EventForm from '../components/EventForm'
+import Card from '../components/ui/Card'
+import PageHeader from '../components/ui/PageHeader'
+import { LoadingState } from '../components/ui/Spinner'
+import { ErrorState } from '../components/ui/StateMessages'
+import { usePageTitle } from '../hooks/usePageTitle'
 import { getEventById, updateEvent } from '../services/eventService'
 import type { EventInput } from '../types/event'
 import { getErrorMessage, isNotFoundError } from '../utils/apiError'
 
 // ADMIN only: load an existing event and edit it
 function EditEventPage() {
+  usePageTitle('Edit Event')
   const { id = '' } = useParams()
   const navigate = useNavigate()
   const [initialValues, setInitialValues] = useState<EventInput | null>(null)
@@ -34,33 +40,20 @@ function EditEventPage() {
     } catch (err) {
       throw new Error(getErrorMessage(err))
     }
-    navigate('/admin/events')
+    navigate('/admin/events', { state: { success: 'Event updated successfully.' } })
   }
 
   return (
-    <section className="mx-auto max-w-2xl rounded-lg bg-white p-6 shadow">
-      <h1 className="mb-6 text-2xl font-bold">Edit Event</h1>
-
-      {loading && <p className="text-gray-500">Loading event...</p>}
-
-      {error && (
-        <div>
-          <p className="rounded bg-red-50 px-3 py-2 text-red-700">{error}</p>
-          <Link to="/admin/events" className="mt-4 inline-block text-orange-600 hover:underline">
-            ← Back to events
-          </Link>
-        </div>
-      )}
-
+    <div className="mx-auto max-w-2xl">
+      <PageHeader title="Edit Event" back={{ to: '/admin/events', label: 'Back to events' }} />
+      {loading && <LoadingState label="Loading event..." />}
+      {error && <ErrorState message={error} />}
       {initialValues && (
-        <EventForm
-          initialValues={initialValues}
-          submitLabel="Save Changes"
-          submittingLabel="Saving..."
-          onSubmit={handleSave}
-        />
+        <Card>
+          <EventForm initialValues={initialValues} submitLabel="Save Changes" submittingLabel="Saving..." onSubmit={handleSave} />
+        </Card>
       )}
-    </section>
+    </div>
   )
 }
 

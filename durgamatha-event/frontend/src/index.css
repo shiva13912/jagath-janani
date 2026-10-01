@@ -1,1 +1,45 @@
 @import "tailwindcss";
+
+/*
+  Durgamatha design tokens.
+  Every colour used by the app is defined once here. Tailwind turns each one into
+  utility classes, e.g. --color-primary -> bg-primary, text-primary, border-primary.
+  Change a value here and the whole site follows.
+*/
+@theme {
+  /* Saffron. White text on it has a 5.2:1 contrast (accessibility minimum is 4.5:1) */
+  --color-primary: #c2410c;
+  --color-primary-hover: #9a3412;
+  --color-primary-soft: #fff7ed;
+
+  /* Deep maroon, used sparingly for accents */
+  --color-secondary: #881337;
+  --color-secondary-soft: #fff1f2;
+
+  --color-page: #faf8f5; /* page background (warm off-white) */
+  --color-surface: #ffffff; /* cards, forms, tables */
+  --color-ink: #1f2937; /* main text */
+  --color-muted: #4b5563; /* secondary text (7:1 on white) */
+  --color-line: #e7e2dc; /* borders and dividers */
+
+  --color-success: #15803d;
+  --color-success-soft: #f0fdf4;
+  --color-warning: #b45309;
+  --color-warning-soft: #fffbeb;
+  --color-danger: #b91c1c;
+  --color-danger-soft: #fef2f2;
+}
+
+@layer base {
+  body {
+    background-color: var(--color-page);
+    color: var(--color-ink);
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* One clear focus ring for every link, button and field used with the keyboard */
+  :focus-visible {
+    outline: 3px solid var(--color-primary);
+    outline-offset: 2px;
+  }
+}

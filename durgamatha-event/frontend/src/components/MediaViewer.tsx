@@ -53,10 +53,10 @@ function MediaViewer({
   }
 
   // Keyboard shortcuts. Kept in a ref so the listener always calls the latest functions.
-  const keys = useRef({ onClose, onPrevious, onNext })
+  const keys = useRef({ onClose, onPrevious, onNext, confirmingDelete })
   const currentId = useRef(media.id) // the item on screen when the viewer closes
   useEffect(() => {
-    keys.current = { onClose, onPrevious, onNext }
+    keys.current = { onClose, onPrevious, onNext, confirmingDelete }
     currentId.current = media.id
   })
 
@@ -70,7 +70,9 @@ function MediaViewer({
 
     function handleKeyDown(event: KeyboardEvent) {
       if (event.key === 'Escape') {
-        keys.current.onClose()
+        // Esc first closes an open "Delete?" question, then the viewer itself
+        if (keys.current.confirmingDelete) setConfirmingDelete(false)
+        else keys.current.onClose()
         return
       }
       // A focused video uses the arrow keys itself (to skip forward/back)
@@ -118,10 +120,12 @@ function MediaViewer({
     `Uploaded ${formatTimestampDate(media.created_at)}`,
   ].filter(Boolean)
 
+  // On tablets and computers the arrows sit beside the photo. On phones they would cover it,
+  // so there they move to the bottom bar instead.
   const navButtonClass =
-    'absolute top-1/2 z-10 flex h-12 w-12 -translate-y-1/2 items-center justify-center rounded-full bg-white/15 text-2xl text-white hover:bg-white/30 focus:outline-none focus-visible:ring-4 focus-visible:ring-orange-400'
+    'absolute top-1/2 z-10 hidden h-12 w-12 -translate-y-1/2 items-center justify-center rounded-full bg-white/15 text-2xl text-white hover:bg-white/30 focus:outline-none focus-visible:ring-4 focus-visible:ring-orange-400 sm:flex'
   const actionClass =
-    'rounded px-4 py-2 font-semibold focus:outline-none focus-visible:ring-4 focus-visible:ring-orange-400 disabled:opacity-60'
+    'inline-flex min-h-11 items-center justify-center rounded-lg px-4 font-semibold focus:outline-none focus-visible:ring-4 focus-visible:ring-orange-400 disabled:opacity-60'
 
   return (
     <div
@@ -149,7 +153,7 @@ function MediaViewer({
       </div>
 
       {/* The photo or video, always fitted inside the screen */}
-      <div className="relative flex min-h-0 flex-1 items-center justify-center px-2 sm:px-16">
+      <div className="relative flex min-h-0 flex-1 items-center justify-center px-2 sm:px-20">
         {onPrevious && (
           <button type="button" onClick={onPrevious} aria-label="Previous" className={`${navButtonClass} left-2`}>
             ‹
@@ -228,7 +232,7 @@ function MediaViewer({
         )}
 
         {confirmingDelete ? (
-          <div className="rounded bg-white p-4 text-gray-900" role="alertdialog" aria-label="Confirm delete">
+          <div className="rounded-lg bg-white p-4 text-ink" role="alertdialog" aria-label="Confirm delete">
             <p className="font-semibold">Are you sure you want to delete this media?</p>
             <p className="mt-1 text-sm text-gray-600">
               "{media.original_filename}" will be removed from Cloudinary and from the album. This cannot be undone.
@@ -238,19 +242,34 @@ function MediaViewer({
                 type="button"
                 onClick={() => setConfirmingDelete(false)}
                 disabled={busy}
-                className={`${actionClass} border border-gray-300 text-gray-700`}
+                className={`${actionClass} border border-line text-ink`}
               >
                 Cancel
               </button>
-              <button type="button" onClick={onDelete} disabled={busy} className={`${actionClass} bg-red-600 text-white hover:bg-red-700`}>
+              <button type="button" onClick={onDelete} disabled={busy} className={`${actionClass} bg-danger text-white hover:bg-red-800`}>
                 {busy ? 'Deleting...' : 'Yes, delete'}
               </button>
             </div>
           </div>
         ) : (
           <div className="flex flex-wrap gap-2">
+            {/* Previous / Next for phones (hidden from tablet size up, where the side arrows show) */}
+            <div className="flex w-full gap-2 sm:hidden">
+              <button
+                type="button"
+                onClick={onPrevious ?? undefined}
+                disabled={!onPrevious}
+                aria-label="Previous"
+                className={`${actionClass} flex-1 bg-white/15 hover:bg-white/30`}
+              >
+                ‹ Previous
+              </button>
+              <button type="button" onClick={onNext ?? undefined} disabled={!onNext} aria-label="Next" className={`${actionClass} flex-1 bg-white/15 hover:bg-white/30`}>
+                Next ›
+              </button>
+            </div>
             {/* A normal link: the file comes straight from Cloudinary, not through our server */}
-            <a href={downloadUrl(media)} download className={`${actionClass} bg-orange-600 text-white hover:bg-orange-700`}>
+            <a href={downloadUrl(media)} download className={`${actionClass} bg-primary text-white hover:bg-primary-hover`}>
               Download
             </a>
             {onToggleCover && (

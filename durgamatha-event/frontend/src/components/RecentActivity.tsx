@@ -1,9 +1,12 @@
 import { useCallback } from 'react'
-import { Link } from 'react-router'
 import { useApiData } from '../hooks/useApiData'
 import { getExpensePage, getIncomePage } from '../services/financeService'
 import { formatEventDate } from '../utils/date'
 import { formatINR } from '../utils/money'
+import { ButtonLink } from './ui/Button'
+import { cardClass } from './ui/Card'
+import { SectionTitle } from './ui/PageHeader'
+import { ErrorState } from './ui/StateMessages'
 
 const RECENT_COUNT = 5
 
@@ -33,21 +36,12 @@ function RecentActivity({ eventId, listPath }: { eventId: string; listPath: { in
   }))
 
   return (
-    <section className="mt-8" aria-labelledby="recent-heading">
-      <h2 id="recent-heading" className="text-xl font-semibold">
-        Recent activity
-      </h2>
-      {error && (
-        <p role="alert" className="mt-3 rounded bg-red-50 px-3 py-2 text-red-700">
-          {error}{' '}
-          <button type="button" onClick={reload} className="font-semibold underline">
-            Try again
-          </button>
-        </p>
-      )}
+    <section className="mt-10" aria-labelledby="recent-heading">
+      <SectionTitle id="recent-heading">Recent activity</SectionTitle>
+      {error && <ErrorState message={error} onRetry={reload} className="mt-3" />}
       <div className="mt-3 grid gap-4 md:grid-cols-2">
-        <ActivityList title="Recent expenses" items={expenses} loading={loading} error={!!error} emptyText="No expenses recorded yet." sign="-" tone="text-red-700" allPath={listPath.expenses} />
-        <ActivityList title="Recent income" items={income} loading={loading} error={!!error} emptyText="No income records yet." sign="+" tone="text-green-700" allPath={listPath.income} />
+        <ActivityList title="Recent expenses" items={expenses} loading={loading} error={!!error} emptyText="No expenses recorded yet." sign="-" tone="text-danger" allPath={listPath.expenses} />
+        <ActivityList title="Recent income" items={income} loading={loading} error={!!error} emptyText="No income records yet." sign="+" tone="text-success" allPath={listPath.income} />
       </div>
     </section>
   )
@@ -67,22 +61,26 @@ interface ActivityListProps {
 function ActivityList({ title, items, loading, error, emptyText, sign, tone, allPath }: ActivityListProps) {
   return (
     // min-w-0 lets long titles shorten with "…" instead of widening the page on phones
-    <div className="min-w-0 rounded-lg bg-white p-4 shadow">
+    <div className={`min-w-0 p-4 ${cardClass}`}>
       <div className="flex items-center justify-between gap-2">
-        <h3 className="font-semibold">{title}</h3>
-        <Link to={allPath} className="text-sm font-medium text-orange-600 hover:underline">
+        <h3 className="font-semibold text-ink">{title}</h3>
+        <ButtonLink to={allPath} variant="ghost" size="sm" aria-label={`View all ${title.replace('Recent ', '')}`}>
           View all
-        </Link>
+        </ButtonLink>
       </div>
-      {loading && <p className="mt-3 text-sm text-gray-500">Loading...</p>}
-      {!loading && !error && items.length === 0 && <p className="mt-3 text-sm text-gray-500">{emptyText}</p>}
+      {loading && (
+        <p role="status" className="mt-3 text-sm text-muted">
+          Loading...
+        </p>
+      )}
+      {!loading && !error && items.length === 0 && <p className="mt-3 text-sm text-muted">{emptyText}</p>}
       {items.length > 0 && (
-        <ul className="mt-2 divide-y divide-gray-100">
+        <ul className="mt-2 divide-y divide-line">
           {items.map((item) => (
             <li key={item.id} className="flex items-start justify-between gap-3 py-2">
               <div className="min-w-0">
-                <p className="truncate font-medium">{item.title}</p>
-                <p className="truncate text-xs text-gray-500">
+                <p className="truncate font-medium text-ink">{item.title}</p>
+                <p className="truncate text-sm text-muted">
                   {item.eventTitle} · {item.detail} · {formatEventDate(item.date)}
                 </p>
               </div>

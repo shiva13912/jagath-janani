@@ -6,6 +6,13 @@ import MediaViewer from '../components/MediaViewer'
 import Pagination from '../components/Pagination'
 import SkeletonGrid from '../components/SkeletonGrid'
 import TypeFilter from '../components/TypeFilter'
+import Alert from '../components/ui/Alert'
+import Button, { ButtonLink } from '../components/ui/Button'
+import Card from '../components/ui/Card'
+import { BackLink } from '../components/ui/PageHeader'
+import { LoadingState } from '../components/ui/Spinner'
+import { EmptyState, ErrorState } from '../components/ui/StateMessages'
+import { usePageTitle } from '../hooks/usePageTitle'
 import { useAuth } from '../hooks/useAuth'
 import { usePagedMedia } from '../hooks/usePagedMedia'
 import { getAlbumById, setAlbumCover } from '../services/albumService'
@@ -25,6 +32,9 @@ function AlbumDetailsPage() {
   const [loading, setLoading] = useState(true)
   const [notFound, setNotFound] = useState(false)
   const [error, setError] = useState('')
+  const [attempt, setAttempt] = useState(0) // "Try again" loads the album once more
+  const [showUploader, setShowUploader] = useState(false)
+  usePageTitle(album?.name ?? (notFound ? 'Album not found' : 'Album'))
 
   const { profile } = useAuth()
   const canUpload = hasRole(profile?.role, TEAM_ROLES) // the backend checks this again
@@ -68,7 +78,13 @@ function AlbumDetailsPage() {
         else setError(getErrorMessage(err))
       })
       .finally(() => setLoading(false))
-  }, [albumId])
+  }, [albumId, attempt])
+
+  function retry() {
+    setError('')
+    setLoading(true)
+    setAttempt((n) => n + 1)
+  }
 
   async function toggleCover() {
     const item = gallery.viewerItem
@@ -98,7 +114,7 @@ function AlbumDetailsPage() {
       if (album.cover_media_id === item.id) setAlbum({ ...album, cover_media_id: null, cover: null })
       gallery.closeViewer()
       gallery.reload()
-      setSuccess(`"${item.original_filename}" was deleted.`)
+      setSuccess(`Media deleted successfully. ("${item.original_filename}")`)
     } catch (err) {
       setActionResult({ mediaId: item.id, text: getErrorMessage(err), isError: true })
     } finally {
@@ -121,91 +137,97 @@ function AlbumDetailsPage() {
 
   return (
     <section className="mx-auto max-w-6xl">
-      <Link to={backLink} className="text-orange-600 hover:underline">
-        ← {event ? `Back to ${event.title}` : 'Back to events'}
-      </Link>
+      <BackLink to={backLink} label={event ? `Back to ${event.title}` : 'Back to events'} />
 
-      {loading && (
-        <p role="status" className="mt-6 text-gray-500">
-          Loading album...
-        </p>
-      )}
+      {loading && <LoadingState label="Loading album..." />}
 
       {notFound && (
-        <div className="mt-6">
-          <h1 className="text-2xl font-bold">Album not found</h1>
-          <p className="mt-2 text-gray-600">This album does not exist or has been removed.</p>
-          <Link to="/gallery" className="mt-4 inline-block text-orange-600 hover:underline">
+        <div className="py-10 text-center">
+          <h1 className="text-2xl font-bold text-ink">Album not found</h1>
+          <p className="mt-2 text-muted">This album does not exist or has been removed.</p>
+          <ButtonLink to="/gallery" className="mt-6">
             Browse the gallery
-          </Link>
+          </ButtonLink>
         </div>
       )}
 
-      {error && (
-        <p role="alert" className="mt-6 rounded bg-red-50 px-3 py-2 text-red-700">
-          {error}
-        </p>
-      )}
+      {error && <ErrorState message={error} onRetry={retry} className="mt-4" />}
 
       {album && (
         <>
-          <article className="mt-6 rounded-lg bg-white p-6 shadow">
-            <h1 className="text-2xl font-bold md:text-3xl">{album.name}</h1>
-            {album.description && <p className="mt-3 whitespace-pre-line text-gray-800">{album.description}</p>}
+          <Card className="mt-2">
+            <h1 className="text-2xl font-bold tracking-tight break-words text-ink md:text-3xl">{album.name}</h1>
+            {album.description && <p className="mt-3 leading-relaxed whitespace-pre-line text-ink">{album.description}</p>}
 
             {event && (
-              <dl className="mt-6 grid gap-4 border-t border-gray-200 pt-4 text-gray-700 sm:grid-cols-3">
+              <dl className="mt-5 grid gap-4 rounded-lg bg-page p-4 sm:grid-cols-3">
                 <div>
-                  <dt className="text-sm text-gray-500">Event</dt>
+                  <dt className="text-sm text-muted">Event</dt>
                   <dd className="font-medium">
-                    <Link to={`/events/${event.id}`} className="hover:text-orange-600">
+                    <Link to={`/events/${event.id}`} className="text-primary underline-offset-2 hover:underline">
                       {event.title}
                     </Link>
                   </dd>
                 </div>
                 <div>
-                  <dt className="text-sm text-gray-500">Date</dt>
-                  <dd className="font-medium">{formatEventDate(event.event_date)}</dd>
+                  <dt className="text-sm text-muted">Date</dt>
+                  <dd className="font-medium text-ink">{formatEventDate(event.event_date)}</dd>
                 </div>
                 <div>
-                  <dt className="text-sm text-gray-500">Location</dt>
-                  <dd className="font-medium">{event.location}</dd>
+                  <dt className="text-sm text-muted">Location</dt>
+                  <dd className="font-medium break-words text-ink">{event.location}</dd>
                 </div>
               </dl>
             )}
-          </article>
+          </Card>
 
-          {canUpload && <MediaUploader albumId={album.id} onUploaded={handleUploaded} />}
-
-          <div className="mt-8 flex flex-wrap items-center justify-between gap-3">
-            <h2 className="text-xl font-semibold">
+          <div className="mt-10 flex flex-wrap items-center justify-between gap-3">
+            <h2 className="text-xl font-semibold text-ink">
               Photos &amp; Videos
-              {pagination && pagination.total > 0 && <span className="ml-2 text-base font-normal text-gray-500">({pagination.total})</span>}
+              {pagination && pagination.total > 0 && <span className="ml-2 text-base font-normal text-muted">({pagination.total})</span>}
             </h2>
-            <TypeFilter value={type} onChange={(value) => changeFilters({ type: value })} />
+            <div className="flex flex-wrap items-center gap-2">
+              <TypeFilter value={type} onChange={(value) => changeFilters({ type: value })} />
+              {/* Management: only team members and admins see this button (the backend checks again) */}
+              {canUpload && (
+                <Button
+                  size="sm"
+                  variant={showUploader ? 'secondary' : 'primary'}
+                  aria-expanded={showUploader}
+                  aria-controls="media-uploader"
+                  onClick={() => setShowUploader((open) => !open)}
+                >
+                  {showUploader ? 'Close upload' : '+ Upload'}
+                </Button>
+              )}
+            </div>
           </div>
 
-          {success && (
-            <p role="status" className="mt-3 rounded bg-green-50 px-3 py-2 text-green-700">
-              {success}
-            </p>
-          )}
-          {gallery.error && (
-            <div role="alert" className="mt-3 rounded bg-red-50 px-3 py-2 text-red-700">
-              {gallery.error}{' '}
-              <button type="button" onClick={gallery.reload} className="font-semibold underline">
-                Try again
-              </button>
+          {/* The upload panel opens under the heading, so the photos stay the first thing visitors see */}
+          {canUpload && showUploader && (
+            <div className="mt-4">
+              <MediaUploader albumId={album.id} onUploaded={handleUploaded} />
             </div>
           )}
+
+          {success && (
+            <Alert tone="success" className="mt-4">
+              {success}
+            </Alert>
+          )}
+          {gallery.error && <ErrorState message={gallery.error} onRetry={gallery.reload} className="mt-4" />}
 
           <div className="mt-4">
             {gallery.loading && media.length === 0 && !gallery.error && <SkeletonGrid label="Loading photos and videos..." />}
 
             {!gallery.loading && !gallery.error && pagination?.total === 0 && (
-              <div className="rounded-lg border-2 border-dashed border-gray-300 p-8 text-center text-gray-500">
-                {emptyMessage(type, 'No photos or videos in this album yet.')}
-              </div>
+              <EmptyState message={emptyMessage(type, 'No photos or videos in this album yet.')}>
+                {canUpload && !showUploader && (
+                  <Button size="sm" onClick={() => setShowUploader(true)}>
+                    Upload Photos/Videos
+                  </Button>
+                )}
+              </EmptyState>
             )}
 
             {media.length > 0 && (

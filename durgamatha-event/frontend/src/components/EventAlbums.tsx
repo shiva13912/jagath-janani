@@ -1,37 +1,29 @@
-import { useEffect, useState } from 'react'
-import AlbumCard from './AlbumCard'
+import { useCallback } from 'react'
+import { useApiData } from '../hooks/useApiData'
 import { getAlbumsByEvent } from '../services/albumService'
-import type { AlbumWithCover } from '../types/album'
-import { getErrorMessage } from '../utils/apiError'
+import AlbumCard, { AlbumCardSkeleton } from './AlbumCard'
+import { SectionTitle } from './ui/PageHeader'
+import { EmptyState, ErrorState } from './ui/StateMessages'
 
 // The "Albums" section shown under an event on the public event details page
 function EventAlbums({ eventId }: { eventId: string }) {
-  const [albums, setAlbums] = useState<AlbumWithCover[]>([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState('')
-
-  useEffect(() => {
-    getAlbumsByEvent(eventId)
-      .then(setAlbums)
-      .catch((err) => setError(getErrorMessage(err)))
-      .finally(() => setLoading(false))
-  }, [eventId])
+  const { data: albums, error, loading, reload } = useApiData(useCallback(() => getAlbumsByEvent(eventId), [eventId]))
 
   return (
-    <section className="mt-8">
-      <h2 className="text-xl font-semibold">Albums</h2>
-
-      {loading && <p className="mt-3 text-gray-500">Loading albums...</p>}
-      {error && <p className="mt-3 rounded bg-red-50 px-3 py-2 text-red-700">{error}</p>}
-      {!loading && !error && albums.length === 0 && (
-        <p className="mt-3 text-gray-600">No albums available for this event yet.</p>
-      )}
-
-      {/* 1 column on phones, 2 on tablets, 3 on laptops */}
-      <div className="mt-3 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        {albums.map((album) => (
-          <AlbumCard key={album.id} album={album} />
-        ))}
+    <section className="mt-10" aria-labelledby="event-albums-heading">
+      <SectionTitle id="event-albums-heading">Albums</SectionTitle>
+      <div className="mt-4">
+        {loading && <AlbumCardSkeleton count={3} />}
+        {error && <ErrorState message={error} onRetry={reload} />}
+        {albums && albums.length === 0 && <EmptyState message="No albums available for this event yet." />}
+        {albums && albums.length > 0 && (
+          // 1 column on phones, 2 on tablets, 3 on laptops
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {albums.map((album) => (
+              <AlbumCard key={album.id} album={album} />
+            ))}
+          </div>
+        )}
       </div>
     </section>
   )

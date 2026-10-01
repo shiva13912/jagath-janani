@@ -1,59 +1,31 @@
-import { useEffect, useState } from 'react'
-import { Link } from 'react-router'
+import EventCard, { EventCardSkeleton } from '../components/EventCard'
+import PageHeader from '../components/ui/PageHeader'
+import { EmptyState, ErrorState } from '../components/ui/StateMessages'
+import { useApiData } from '../hooks/useApiData'
+import { usePageTitle } from '../hooks/usePageTitle'
 import { getEvents } from '../services/eventService'
-import type { Event } from '../types/event'
-import { getErrorMessage } from '../utils/apiError'
-import { formatEventDate } from '../utils/date'
 
-// Shortens long descriptions for the list (the details page shows the full text)
-function shorten(text: string, maxLength = 150): string {
-  return text.length > maxLength ? `${text.slice(0, maxLength).trimEnd()}...` : text
-}
-
-// Public page: anyone can see the list of events
+// Public page: anyone can see the list of events (upcoming first, then past ones)
 function EventsPage() {
-  const [events, setEvents] = useState<Event[]>([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState('')
-
-  // Load the events once when the page opens
-  useEffect(() => {
-    getEvents()
-      .then(setEvents)
-      .catch((err) => setError(getErrorMessage(err)))
-      .finally(() => setLoading(false))
-  }, [])
+  usePageTitle('Events')
+  const { data: events, error, loading, reload } = useApiData(getEvents)
 
   return (
     <section>
-      <h1 className="text-2xl font-bold md:text-3xl">Events</h1>
+      <PageHeader title="Events" subtitle="Upcoming celebrations first, then past events." />
 
-      {loading && <p className="mt-6 text-gray-500">Loading events...</p>}
-
-      {error && <p className="mt-6 rounded bg-red-50 px-3 py-2 text-red-700">{error}</p>}
-
-      {!loading && !error && events.length === 0 && (
-        <p className="mt-6 text-gray-600">No events available yet.</p>
-      )}
+      {loading && <EventCardSkeleton count={6} />}
+      {error && <ErrorState message={error} onRetry={reload} />}
+      {events?.length === 0 && <EmptyState message="No events yet. Please check back soon." />}
 
       {/* 1 column on phones, 2 on tablets, 3 on large screens */}
-      <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        {events.map((event) => (
-          <article key={event.id} className="flex flex-col rounded-lg bg-white p-5 shadow">
-            <h2 className="text-lg font-semibold">{event.title}</h2>
-            <p className="mt-1 text-sm text-gray-500">
-              {formatEventDate(event.event_date)} · {event.location}
-            </p>
-            <p className="mt-3 flex-1 text-gray-700">{shorten(event.description)}</p>
-            <Link
-              to={`/events/${event.id}`}
-              className="mt-4 inline-block self-start rounded bg-orange-600 px-4 py-2 text-sm font-semibold text-white hover:bg-orange-700"
-            >
-              View Details
-            </Link>
-          </article>
-        ))}
-      </div>
+      {events && events.length > 0 && (
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {events.map((event) => (
+            <EventCard key={event.id} event={event} />
+          ))}
+        </div>
+      )}
     </section>
   )
 }

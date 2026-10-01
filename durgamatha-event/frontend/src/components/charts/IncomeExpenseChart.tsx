@@ -3,6 +3,7 @@ import type { EventFinance } from '../../types/finance'
 import { shortenLabel } from '../../utils/chartLabels'
 import { formatINR, formatINRShort } from '../../utils/money'
 import ChartCard from './ChartCard'
+import { chartColors } from './chartColors'
 
 // Income (green) next to expenses (red), one pair of bars per event
 function IncomeExpenseChart({ events }: { events: EventFinance[] }) {
@@ -29,8 +30,8 @@ function IncomeExpenseChart({ events }: { events: EventFinance[] }) {
           <YAxis tickFormatter={formatINRShort} width={56} tick={{ fontSize: 12 }} />
           <Tooltip formatter={(value) => formatINR(Number(value))} />
           <Legend />
-          <Bar dataKey="Income" fill="#16a34a" radius={[4, 4, 0, 0]} />
-          <Bar dataKey="Expenses" fill="#dc2626" radius={[4, 4, 0, 0]} />
+          <Bar dataKey="Income" fill={chartColors.income} radius={[4, 4, 0, 0]} />
+          <Bar dataKey="Expenses" fill={chartColors.expenses} radius={[4, 4, 0, 0]} />
         </BarChart>
       </ResponsiveContainer>
     </ChartCard>

@@ -2,6 +2,8 @@ import { Navigate, Outlet } from 'react-router'
 import { useAuth } from '../hooks/useAuth'
 import type { Role } from '../types/auth'
 import { hasRole } from '../utils/roles'
+import Button from './ui/Button'
+import { LoadingState } from './ui/Spinner'
 
 interface ProtectedRouteProps {
   // If given, the user's role must be one of these. If not given, any logged-in user is allowed.
@@ -16,7 +18,7 @@ function ProtectedRoute({ allowedRoles }: ProtectedRouteProps) {
 
   // Still checking the saved session: don't redirect yet, or a refresh would kick the user out
   if (loading) {
-    return <p className="py-12 text-center text-gray-500">Loading...</p>
+    return <LoadingState />
   }
 
   if (!isAuthenticated) {
@@ -28,14 +30,12 @@ function ProtectedRoute({ allowedRoles }: ProtectedRouteProps) {
   if (allowedRoles && !profile && profileError) {
     return (
       <div className="py-12 text-center">
-        <p className="mx-auto max-w-md rounded bg-red-50 px-3 py-2 text-red-700">{profileError}</p>
-        <button
-          type="button"
-          onClick={() => window.location.reload()}
-          className="mt-4 rounded border border-gray-300 px-4 py-2 text-gray-700 hover:bg-gray-50"
-        >
+        <p role="alert" className="mx-auto max-w-md rounded-lg bg-danger-soft px-4 py-3 text-danger">
+          {profileError}
+        </p>
+        <Button variant="secondary" className="mt-4" onClick={() => window.location.reload()}>
           Try again
-        </button>
+        </Button>
       </div>
     )
   }

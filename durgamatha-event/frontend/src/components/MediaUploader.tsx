@@ -3,6 +3,9 @@ import { useRef, useState, type DragEvent } from 'react'
 import { uploadMedia } from '../services/mediaService'
 import { getErrorMessage } from '../utils/apiError'
 import { ACCEPTED_FILE_TYPES, checkFile, formatFileSize, getFileKind } from '../utils/mediaFiles'
+import Alert from './ui/Alert'
+import Button from './ui/Button'
+import { cardClass } from './ui/Card'
 
 // One selected file and how its upload is going
 interface SelectedFile {
@@ -23,6 +26,7 @@ function MediaUploader({ albumId, onUploaded }: MediaUploaderProps) {
   const [selected, setSelected] = useState<SelectedFile[]>([])
   const [uploading, setUploading] = useState(false)
   const [dragging, setDragging] = useState(false)
+  const [summary, setSummary] = useState('') // "Media uploaded successfully." after a batch
   const inputRef = useRef<HTMLInputElement>(null)
 
   // Adds files from the picker or a drop, checking each one first
@@ -33,6 +37,7 @@ function MediaUploader({ albumId, onUploaded }: MediaUploaderProps) {
       return { file, status: problem ? 'invalid' : 'ready', progress: 0, message: problem }
     })
     setSelected((current) => [...current.filter((item) => item.status !== 'done'), ...added])
+    setSummary('')
   }
 
   // Changes one file's entry in the list
@@ -50,6 +55,8 @@ function MediaUploader({ albumId, onUploaded }: MediaUploaderProps) {
     const toUpload = selected.filter((item) => item.status === 'ready' || item.status === 'failed')
     if (toUpload.length === 0) return
     setUploading(true)
+    setSummary('')
+    let uploadedCount = 0
 
     // One file at a time: simple, gentle on the server, and gives a real progress bar per file
     for (const { file } of toUpload) {
@@ -61,6 +68,7 @@ function MediaUploader({ albumId, onUploaded }: MediaUploaderProps) {
         )
         const failure = result.errors[0]
         updateFile(file, failure ? { status: 'failed', message: failure.message } : { status: 'done', progress: 100 })
+        if (!failure) uploadedCount += 1
       } catch (err) {
         // The backend explains per-file problems in "errors"; otherwise use the usual messages
         const data = isAxiosError(err) ? (err.response?.data as { errors?: { message: string }[] } | undefined) : undefined
@@ -69,14 +77,23 @@ function MediaUploader({ albumId, onUploaded }: MediaUploaderProps) {
     }
 
     setUploading(false)
+    if (uploadedCount > 0) {
+      setSummary(
+        uploadedCount === toUpload.length
+          ? 'Media uploaded successfully.'
+          : `${uploadedCount} of ${toUpload.length} files uploaded. See the list for the files that failed.`,
+      )
+    }
     onUploaded()
   }
 
   const readyCount = selected.filter((item) => item.status === 'ready' || item.status === 'failed').length
 
   return (
-    <section className="mt-6 rounded-lg bg-white p-4 shadow sm:p-6">
-      <h2 className="text-lg font-semibold">Upload Photos/Videos</h2>
+    <section id="media-uploader" className={`p-4 sm:p-6 ${cardClass}`} aria-labelledby="uploader-heading">
+      <h3 id="uploader-heading" className="text-lg font-semibold text-ink">
+        Upload Photos/Videos
+      </h3>
 
       {/* Drop zone: a plain <div> with the browser's drag & drop events, no extra library */}
       <div
@@ -87,18 +104,13 @@ function MediaUploader({ albumId, onUploaded }: MediaUploaderProps) {
         onDragLeave={() => setDragging(false)}
         onDrop={handleDrop}
         className={`mt-3 rounded-lg border-2 border-dashed p-6 text-center ${
-          dragging ? 'border-orange-500 bg-orange-50' : 'border-gray-300'
+          dragging ? 'border-primary bg-primary-soft' : 'border-line'
         }`}
       >
-        <p className="text-gray-600">Drag files here or</p>
-        <button
-          type="button"
-          onClick={() => inputRef.current?.click()}
-          disabled={uploading}
-          className="mt-2 rounded border border-orange-600 px-4 py-2 font-semibold text-orange-600 hover:bg-orange-50 disabled:opacity-60"
-        >
+        <p className="text-muted">Drag files here or</p>
+        <Button variant="secondary" className="mt-2" onClick={() => inputRef.current?.click()} disabled={uploading}>
           Select Photos/Videos
-        </button>
+        </Button>
         <input
           ref={inputRef}
           type="file"
@@ -111,7 +123,7 @@ function MediaUploader({ albumId, onUploaded }: MediaUploaderProps) {
             event.target.value = '' // lets the same file be chosen again later
           }}
         />
-        <p className="mt-2 text-xs text-gray-500">JPG, PNG, WEBP up to 10 MB · MP4, WEBM, MOV up to 100 MB</p>
+        <p className="mt-2 text-sm text-muted">JPG, PNG, WEBP up to 10 MB · MP4, WEBM, MOV up to 100 MB</p>
       </div>
 
       {selected.length > 0 && (
@@ -120,19 +132,19 @@ function MediaUploader({ albumId, onUploaded }: MediaUploaderProps) {
             <li key={`${item.file.name}-${index}`} className="text-sm">
               <div className="flex flex-wrap items-baseline justify-between gap-x-3">
                 <span className="min-w-0 truncate font-medium">{item.file.name}</span>
-                <span className="text-xs text-gray-500">
+                <span className="text-xs text-muted">
                   {getFileKind(item.file) ?? 'unsupported'} · {formatFileSize(item.file.size)}
                 </span>
               </div>
               {/* Progress bar: its width is the real percentage sent */}
               <div className="mt-1 h-2 overflow-hidden rounded bg-gray-200">
                 <div
-                  className={`h-full ${item.status === 'failed' || item.status === 'invalid' ? 'bg-red-500' : item.status === 'done' ? 'bg-green-600' : 'bg-orange-500'}`}
+                  className={`h-full ${item.status === 'failed' || item.status === 'invalid' ? 'bg-danger' : item.status === 'done' ? 'bg-success' : 'bg-primary'}`}
                   style={{ width: `${item.status === 'invalid' ? 100 : item.progress}%` }}
                 />
               </div>
               <p
-                className={`mt-1 text-xs ${item.status === 'failed' || item.status === 'invalid' ? 'text-red-600' : 'text-gray-500'}`}
+                className={`mt-1 text-xs ${item.status === 'failed' || item.status === 'invalid' ? 'text-danger' : 'text-muted'}`}
                 data-status={item.status}
               >
                 {item.status === 'ready' && 'Ready'}
@@ -146,23 +158,26 @@ function MediaUploader({ albumId, onUploaded }: MediaUploaderProps) {
         </ul>
       )}
 
+      {summary && (
+        <Alert tone={summary.startsWith('Media') ? 'success' : 'warning'} className="mt-4">
+          {summary}
+        </Alert>
+      )}
+
       <div className="mt-4 flex flex-col gap-2 sm:flex-row">
-        <button
-          type="button"
-          onClick={handleUpload}
-          disabled={uploading || readyCount === 0}
-          className="rounded bg-orange-600 px-5 py-2 font-semibold text-white hover:bg-orange-700 disabled:opacity-60"
-        >
-          {uploading ? 'Uploading...' : `Upload${readyCount > 0 ? ` (${readyCount})` : ''}`}
-        </button>
+        <Button onClick={handleUpload} disabled={readyCount === 0} loading={uploading} loadingText="Uploading...">
+          {`Upload${readyCount > 0 ? ` (${readyCount})` : ''}`}
+        </Button>
         {selected.length > 0 && !uploading && (
-          <button
-            type="button"
-            onClick={() => setSelected([])}
-            className="rounded border border-gray-300 px-5 py-2 text-gray-700 hover:bg-gray-50"
+          <Button
+            variant="secondary"
+            onClick={() => {
+              setSelected([])
+              setSummary('')
+            }}
           >
             Clear list
-          </button>
+          </Button>
         )}
       </div>
     </section>
