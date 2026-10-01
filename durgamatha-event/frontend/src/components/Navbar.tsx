@@ -53,7 +53,7 @@ function Navbar() {
   return (
     <header ref={headerRef} className="sticky top-0 z-30 border-b border-line bg-surface/95 backdrop-blur">
       <div className="mx-auto flex h-16 max-w-6xl items-center justify-between gap-4 px-4 sm:px-6">
-        <Link to="/" className="flex shrink-0 items-center gap-2 rounded-lg font-bold text-ink">
+        <Link to="/" className="flex min-h-11 shrink-0 items-center gap-2 rounded-lg font-bold text-ink">
           <span aria-hidden="true" className="flex h-9 w-9 items-center justify-center rounded-full bg-primary text-lg text-white">
             ॐ
           </span>
